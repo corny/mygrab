@@ -4,7 +4,6 @@ import (
 	"github.com/zmap/zgrab/zlib"
 	"github.com/zmap/zgrab/ztools/zlog"
 	"io"
-	"log"
 	"os"
 	"runtime"
 	"sync"
@@ -13,21 +12,6 @@ import (
 
 type Decoder interface {
 	DecodeNext() (interface{}, error)
-}
-
-func output(grab zlib.Grab) {
-	for _, entry := range grab.Log {
-		data := entry.Data
-
-		obj, ok := data.(*zlib.TLSHandshakeEvent)
-		if ok {
-			handshake := obj.GetHandshakeLog()
-			log.Println(handshake.ServerHello.Version)
-			log.Println(handshake.ServerHello.CipherSuite)
-		}
-
-		log.Println(data.GetType())
-	}
 }
 
 func Process(in Decoder, config zlib.Config) {
@@ -45,8 +29,8 @@ func Process(in Decoder, config zlib.Config) {
 
 	// Start the output handler
 	go func() {
-		for result := range outputQueue {
-			output(*result)
+		for out := range outputQueue {
+			saveOutput(*out)
 		}
 		outputDone.Done()
 	}()
@@ -97,6 +81,8 @@ func main() {
 	config.EHLODomain = "example.com"
 	config.Senders = 100
 	config.Timeout = time.Duration(10) * time.Second
+
+	connect("dbname=survey_development host=/var/run/postgresql")
 
 	decoder := zlib.NewGrabTargetDecoder(os.Stdin)
 
