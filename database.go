@@ -6,6 +6,7 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/zmap/zgrab/zlib"
 	"github.com/zmap/zgrab/ztools/x509"
+	"github.com/zmap/zgrab/ztools/ztls"
 	"log"
 )
 
@@ -39,11 +40,11 @@ func saveCertificate(cert *x509.Certificate) {
 	}
 
 	var id int
-	err := dbconn.QueryRow("SELECT id FROM raw_certificates WHERE sha1_fingerprint = $1", sha1).Scan(&id)
+	err := dbconn.QueryRow("SELECT id FROM raw_certificates WHERE id = $1", sha1).Scan(&id)
 	switch {
 	case err == sql.ErrNoRows:
 		// not yet present
-		dbconn.QueryRow("INSERT INTO raw_certificates (id, sha1_fingerprint) VALUES ($1,$2)", id, sha1)
+		dbconn.QueryRow("INSERT INTO raw_certificates (id, id) VALUES ($1,$2)", id, sha1)
 		// TODO insert into certificates
 	case err != nil:
 		log.Fatal(err)
@@ -56,28 +57,44 @@ func saveCertificate(cert *x509.Certificate) {
 
 func saveOutput(grab zlib.Grab) {
 	address := grab.Host.String()
+	var tlsHandshake *ztls.ServerHandshake
+	var lastError error
 
 	for _, entry := range grab.Log {
 		data := entry.Data
-
 		log.Println(data.GetType())
+
+		if entry.Error != nil {
+			lastError = entry.Error
+		}
+
 		obj, ok := data.(*zlib.TLSHandshakeEvent)
 		if ok {
-			handshake := obj.GetHandshakeLog()
-			log.Println(handshake.ServerHello.Version)
-			log.Println(handshake.ServerHello.CipherSuite)
-
-			// Save certificates
-			for _, cert := range handshake.ServerCertificates.ParsedCertificates {
-				saveCertificate(cert)
-			}
+			tlsHandshake = obj.GetHandshakeLog()
 		}
+	}
+
+	log.Println("Error: ", lastError)
+
+	if tlsHandshake != nil {
+		log.Println(tlsHandshake.ServerHello.Version)
+		log.Println(tlsHandshake.ServerHello.CipherSuite)
+
+		// Save certificates
+		for _, cert := range tlsHandshake.ServerCertificates.ParsedCertificates {
+			saveCertificate(cert)
+		}
+
 	}
 
 	var id int
 	err := dbconn.QueryRow("SELECT id FROM mx_hosts WHERE address = $1", address).Scan(&id)
-	if err != nil && err != sql.ErrNoRows {
-		log.Fatal("INSERT mx_host", id)
-		return
+	switch {
+	case err == sql.ErrNoRows:
+		// not yet present
+		dbconn.QueryRow("INSERT INTO mx_hosts (address) VALUES ($1)", address)
+	case err != nil:
+		log.Fatal(err)
+	default:
 	}
 }

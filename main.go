@@ -10,8 +10,22 @@ import (
 	"time"
 )
 
+var zlibConfig = &zlib.Config{}
+
 type Decoder interface {
 	DecodeNext() (interface{}, error)
+}
+
+func init() {
+	zlibConfig.ErrorLog = zlog.New(os.Stderr, "banner-grab")
+	zlibConfig.Port = 25
+	zlibConfig.SMTP = true
+	zlibConfig.StartTLS = true
+	zlibConfig.Banners = true
+	zlibConfig.EHLO = true
+	zlibConfig.EHLODomain = "example.com"
+	zlibConfig.Senders = 100
+	zlibConfig.Timeout = time.Duration(10) * time.Second
 }
 
 func Process(in Decoder, config zlib.Config) {
@@ -71,20 +85,9 @@ func Process(in Decoder, config zlib.Config) {
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
-	config := zlib.Config{}
-	config.ErrorLog = zlog.New(os.Stderr, "banner-grab")
-	config.Port = 25
-	config.SMTP = true
-	config.StartTLS = true
-	config.Banners = true
-	config.EHLO = true
-	config.EHLODomain = "example.com"
-	config.Senders = 100
-	config.Timeout = time.Duration(10) * time.Second
-
 	connect("dbname=survey_development host=/var/run/postgresql")
 
 	decoder := zlib.NewGrabTargetDecoder(os.Stdin)
 
-	Process(decoder, config)
+	Process(decoder, *zlibConfig)
 }
