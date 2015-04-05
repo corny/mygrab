@@ -31,7 +31,7 @@ func init() {
 func Process(in Decoder, config zlib.Config) {
 	workers := config.Senders
 	processQueue := make(chan zlib.GrabTarget, workers*4)
-	outputQueue := make(chan *zlib.Grab, workers*4)
+	outputQueue := make(chan HostResult, workers*4)
 
 	w := zlib.NewGrabWorker(&config)
 
@@ -43,8 +43,8 @@ func Process(in Decoder, config zlib.Config) {
 
 	// Start the output handler
 	go func() {
-		for out := range outputQueue {
-			saveOutput(*out)
+		for result := range outputQueue {
+			saveOutput(result)
 		}
 		outputDone.Done()
 	}()
@@ -53,7 +53,7 @@ func Process(in Decoder, config zlib.Config) {
 	for i := uint(0); i < workers; i++ {
 		go func() {
 			for obj := range processQueue {
-				outputQueue <- zlib.GrabBanner(&config, &obj)
+				outputQueue <- NewHostResult(obj)
 			}
 			workerDone.Done()
 		}()
