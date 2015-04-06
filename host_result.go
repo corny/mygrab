@@ -114,7 +114,8 @@ func simplifyError(err error) error {
 	return err
 }
 
-func NewZgrabResult(target zlib.GrabTarget) HostResult {
+// Creates a ZgrabResul
+func NewHostResult(target zlib.GrabTarget) HostResult {
 	result := HostResult{grab: zlib.GrabBanner(zlibConfig, &target)}
 
 	for _, entry := range result.grab.Log {
