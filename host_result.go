@@ -53,6 +53,18 @@ func (result *HostResult) ServerCertificateSHA1() *string {
 	return &str
 }
 
+// Fingerprings of received CA-Certificates
+func (result *HostResult) CaCertificatesSHA1() []string {
+	hashes := make([]string, 3)
+
+	for i, cert := range result.Certificates() {
+		if i > 0 {
+			hashes = append(hashes, string(cert.FingerprintSHA1))
+		}
+	}
+	return hashes
+}
+
 // The pointer to error message or nil
 func (result *HostResult) ErrorString() *string {
 	if result.Error == nil {

@@ -34,9 +34,9 @@ func connect(dataSourceName string) {
 // Saves a certificate if it is not saved yet
 func saveCertificate(cert *x509.Certificate) {
 	sha1sum := string(cert.FingerprintSHA1)
-	subject := string(x509.MD5Fingerprint(&cert.RawSubject))
-	issuer := string(x509.MD5Fingerprint(&cert.RawIssuer))
-	pubkey := string(x509.MD5Fingerprint(&cert.RawSubjectPublicKeyInfo))
+	subject := string(x509.SHA1Fingerprint(cert.RawSubject))
+	issuer := string(x509.SHA1Fingerprint(cert.RawIssuer))
+	pubkey := string(x509.SHA1Fingerprint(cert.RawSubjectPublicKeyInfo))
 
 	// Certificate cached?
 	if _, ok := knownCerts.Get(sha1sum); ok {
@@ -67,7 +67,7 @@ func saveCertificate(cert *x509.Certificate) {
 }
 
 // Saves a HostResult in the database
-func saveOutput(result HostResult) {
+func saveHostResult(result HostResult) {
 	address := result.Host().String()
 	certs := result.Certificates()
 	tlsHandshake := result.TLSHandshake
@@ -88,17 +88,19 @@ func saveOutput(result HostResult) {
 	var id int
 	err := dbconn.QueryRow("SELECT id FROM mx_hosts WHERE address = $1", address).Scan(&id)
 
+	params := []interface{}{result.ErrorString(), starttls, tlsVersion, tlsCipher, result.ServerCertificateSHA1(), address}
+
 	switch {
 	case err == sql.ErrNoRows:
 		// not yet present
-		_, err := dbconn.Exec("INSERT INTO mx_hosts (error, starttls, tls_version, tls_cipher_suite, certificate_id, address) VALUES ($1,$2,$3,$4,$5,$6)", result.ErrorString(), starttls, tlsVersion, tlsCipher, result.ServerCertificateSHA1(), address)
+		_, err := dbconn.Exec("INSERT INTO mx_hosts (error, starttls, tls_version, tls_cipher_suite, certificate_id, updated_at, address) VALUES ($1,$2,$3,$4,$5, NOW(), $6)", params...)
 		if err != nil {
 			log.Panicln(err)
 		}
 	case err != nil:
 		log.Fatal(err)
 	default:
-		_, err := dbconn.Exec("UPDATE mx_hosts SET error=$1, starttls=$2, tls_version=$3, tls_cipher_suite=$4, certificate_id=$5 WHERE address = $6", result.ErrorString(), starttls, tlsVersion, tlsCipher, result.ServerCertificateSHA1(), address)
+		_, err := dbconn.Exec("UPDATE mx_hosts SET error=$1, starttls=$2, tls_version=$3, tls_cipher_suite=$4, certificate_id=$5, updated_at=NOW() WHERE address = $6", params...)
 		if err != nil {
 			log.Panicln(err)
 		}

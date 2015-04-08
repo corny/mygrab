@@ -1,8 +1,10 @@
-package main
+package mygrab
 
 import (
+	"errors"
 	"github.com/miekg/dns"
 	"github.com/miekg/unbound"
+	"strconv"
 	"sync"
 )
 
@@ -21,7 +23,7 @@ type DnsResult struct {
 
 type DnsJob struct {
 	// waitGroup for the waiting routines
-	wait WaitGroup
+	wait sync.WaitGroup
 
 	Query  *DnsQuery
 	Result *DnsResult
@@ -42,14 +44,16 @@ var unboundCtx = unbound.New()
 // Creates a new query
 func NewDnsQuery(query *DnsQuery) DnsJob {
 	queryMutex.Lock()
+	var job DnsJob
+	var ok bool
 
 	// Is the same query already running?
-	if job, ok := queryMap[query]; !ok {
+	if job, ok = queryMap[*query]; !ok {
 		job := DnsJob{}
 		job.Query = query
-		job.wait.Add()
+		job.wait.Add(1)
 
-		queries[query] = job
+		queryMap[*query] = job
 		queryChan <- job
 	}
 	queryMutex.Unlock()
@@ -67,7 +71,7 @@ func (job DnsJob) Finished(result *DnsResult) {
 
 	// clean up the map
 	queryMutex.Lock()
-	delete(queryMap, job.Query)
+	delete(queryMap, *job.Query)
 	queryMutex.Unlock()
 
 	// set the result and wake up the waiting routines
@@ -83,20 +87,24 @@ func (result *DnsResult) Append(entry string) {
 // Does the lookup
 func lookup(job *DnsJob) (result DnsResult) {
 	// execute the query
-	response, err := unboundCtx.Resolve(job.Query.Domain, job.Query.Type, dns.ClassINET)
+	response, err := unboundCtx.Resolve(job.Query.Domain, uint16(job.Query.Type), dns.ClassINET)
 
 	result.Secure = response.Secure
-	result.WhyBogus = response.WhyBogus
+
+	if response.WhyBogus != "" {
+		result.WhyBogus = &response.WhyBogus
+	}
 
 	// error or NXDomain rcode?
 	if err != nil || response.NxDomain {
-		result.Error = err
+		result.Error = &err
 		return
 	}
 
 	// Other erroneous rcode?
 	if response.Rcode != dns.RcodeSuccess {
-		result.Error = errors.New(dns.RcodeToString[response.Rcode])
+		err = errors.New(dns.RcodeToString[response.Rcode])
+		result.Error = &err
 		return
 	}
 
