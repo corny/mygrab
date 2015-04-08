@@ -1,9 +1,10 @@
-package mygrab
+package main
 
 import (
 	"errors"
 	"github.com/miekg/dns"
 	"github.com/miekg/unbound"
+	"log"
 	"strconv"
 	"sync"
 )
@@ -30,53 +31,67 @@ type DnsJob struct {
 }
 
 // map from queries to jobs
-var queryMap = make(map[DnsQuery]DnsJob)
+var queryMap = make(map[DnsQuery]*DnsJob)
 
 // mutex to the map
 var queryMutex = sync.Mutex{}
 
 // waiting jobs
-var queryChan = make(chan DnsJob)
+var queryChan = make(chan *DnsJob, 10)
 
 // context for Unbound
 var unboundCtx = unbound.New()
 
 // Creates a new query
-func NewDnsQuery(query *DnsQuery) DnsJob {
+func NewDnsJob(domain string, typ dns.Type) *DnsJob {
+	var query = DnsQuery{Domain: domain, Type: typ}
+	var job *DnsJob
+	var exist bool
+
 	queryMutex.Lock()
-	var job DnsJob
-	var ok bool
 
 	// Is the same query already running?
-	if job, ok = queryMap[*query]; !ok {
-		job := DnsJob{}
-		job.Query = query
+	if job, exist = queryMap[query]; !exist {
+		job = &DnsJob{}
+		job.Query = &query
 		job.wait.Add(1)
-
-		queryMap[*query] = job
-		queryChan <- job
+		log.Printf("job created %p", job)
+		queryMap[query] = job
 	}
 	queryMutex.Unlock()
+
+	if !exist {
+		queryChan <- job
+	}
 
 	return job
 }
 
 // Wait until the query is finished
-func (job DnsJob) Wait() {
-	job.Wait()
+func (job *DnsJob) Wait() DnsJob {
+	log.Printf("waiting for %p", job)
+	job.wait.Wait()
+	return *job
 }
 
 // Saves the result and wakes up the waiting routines
-func (job DnsJob) Finished(result *DnsResult) {
+func (job *DnsJob) run() {
+	result := job.Query.Lookup()
+	job.Result = &result
 
 	// clean up the map
 	queryMutex.Lock()
 	delete(queryMap, *job.Query)
 	queryMutex.Unlock()
 
-	// set the result and wake up the waiting routines
-	job.Result = result
+	// wake up the waiting routines
+	log.Printf("job finished: %p", job)
 	job.wait.Done()
+}
+
+// Wait until the query is finished
+func (job *DnsJob) Results() []string {
+	return job.Result.Results
 }
 
 // Appends a new entry to the result
@@ -85,9 +100,10 @@ func (result *DnsResult) Append(entry string) {
 }
 
 // Does the lookup
-func lookup(job *DnsJob) (result DnsResult) {
+func (query *DnsQuery) Lookup() (result DnsResult) {
+
 	// execute the query
-	response, err := unboundCtx.Resolve(job.Query.Domain, uint16(job.Query.Type), dns.ClassINET)
+	response, err := unboundCtx.Resolve(query.Domain, uint16(query.Type), uint16(dns.ClassINET))
 
 	result.Secure = response.Secure
 
@@ -124,5 +140,5 @@ func lookup(job *DnsJob) (result DnsResult) {
 		}
 	}
 
-	return
+	return result
 }
