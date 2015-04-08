@@ -14,23 +14,19 @@ const (
 	TypeAAAA = dns.Type(dns.TypeAAAA)
 )
 
-var addressTypes []dns.Type
-
-func init() {
+var (
 	addressTypes = []dns.Type{TypeA, dns.Type(TypeAAAA)}
-}
+)
 
 func Resolve(domain string) {
 	// Do the MX lookups
-	mxJob := NewDnsJob(domain, TypeMX)
-	mxJob.Wait()
+	mxJob := dnsProcessor.NewJob(domain, TypeMX)
 
 	// Make mx hostnames unique
 	mxHosts := UniqueStrings(mxJob.Results())
 
 	// Do the A/AAAA lookups
-	mxAddresses := NewDnsJobs(mxHosts, addressTypes)
-	mxAddresses.Wait()
+	mxAddresses := dnsProcessor.NewJobs(mxHosts, addressTypes)
 
 	// Make addresses unique
 	addresses := UniqueStrings(mxAddresses.Results())
