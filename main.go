@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"github.com/zmap/zgrab/zlib"
 	"github.com/zmap/zgrab/ztools/zlog"
@@ -42,7 +43,11 @@ func init() {
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU() + 2)
 
-	Resolve("digineo.de")
+	// Read stdin
+	scanner := bufio.NewScanner(os.Stdin)
+	for scanner.Scan() {
+		Process(scanner.Text())
+	}
 
 	//decoder := zlib.NewGrabTargetDecoder(os.Stdin)
 	//Process(decoder, *zlibConfig)

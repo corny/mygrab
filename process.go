@@ -5,6 +5,7 @@ import (
 	"github.com/zmap/zgrab/zlib"
 	"io"
 	"log"
+	"net"
 	"sync"
 )
 
@@ -18,24 +19,33 @@ var (
 	addressTypes = []dns.Type{TypeA, dns.Type(TypeAAAA)}
 )
 
-func Resolve(domain string) {
+func Process(domain string) {
 	// Do the MX lookups
 	mxJob := dnsProcessor.NewJob(domain, TypeMX)
 
 	// Make mx hostnames unique
 	mxHosts := UniqueStrings(mxJob.Results())
 
+	saveDomain(domain, mxJob.Result)
+
 	// Do the A/AAAA lookups
 	mxAddresses := dnsProcessor.NewJobs(mxHosts, addressTypes)
+
+	saveMxRecords(mxHosts, mxAddresses.jobs)
 
 	// Make addresses unique
 	addresses := UniqueStrings(mxAddresses.Results())
 
-	log.Println(addresses)
-	// TODO dnsgrab
+	// Do the bannergrabs
+	for _, addr := range addresses {
+		log.Println("grabbing", addr)
+		target := zlib.GrabTarget{Addr: net.ParseIP(addr)}
+		result := NewHostResult(target)
+		saveHostResult(result)
+	}
 }
 
-func Process(in Decoder, config zlib.Config) {
+func ProcessWithDecoder(in Decoder, config zlib.Config) {
 	workers := config.Senders
 	processQueue := make(chan zlib.GrabTarget, workers*4)
 	outputQueue := make(chan HostResult, workers*4)

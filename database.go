@@ -6,6 +6,7 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/zmap/zgrab/ztools/x509"
 	"log"
+	"strings"
 )
 
 var (
@@ -29,6 +30,49 @@ func connect(dataSourceName string) {
 		panic(err)
 	}
 
+}
+
+func saveDomain(domain string, result *DnsResult) {
+
+	params := []interface{}{StringArray(result.Results), result.Secure, result.Error, result.WhyBogus, domain}
+
+	var id int
+	err := dbconn.QueryRow("SELECT 1 FROM domains WHERE name = $1", domain).Scan(&id)
+	switch {
+	case err == sql.ErrNoRows:
+		// not yet present
+		_, err = dbconn.Exec("INSERT INTO domains (mx_hosts, dns_secure, dns_error, dns_bogus, name) VALUES ($1,$2,$3,$4,$5)", params...)
+		if err != nil {
+			log.Panicln(err)
+		}
+	case err != nil:
+		log.Fatal(err)
+	default:
+		_, err = dbconn.Exec("UPDATE domains SET mx_hosts=$1, dns_secure=$2, dns_error=$3, dns_bogus=$4 WHERE name=$5", params...)
+		if err != nil {
+			log.Panicln(err)
+		}
+	}
+}
+
+func saveMxRecords(hostnames []string, result []*DnsJob) {
+	// TODO better error handling
+
+	tx, err := dbconn.Begin()
+	log.Println(err)
+	_, err = tx.Exec("DELETE FROM mx_records WHERE hostname IN ($1)", strings.Join(hostnames, ","))
+
+	for _, job := range result {
+		for _, address := range job.Results() {
+			_, err = tx.Exec("INSERT INTO mx_records (hostname, address, dns_secure, dns_error, dns_bogus) VALUES ($1,$2,$3,$4,$5)", job.Query.Domain, address, job.Result.Secure, job.Result.Error, job.Result.WhyBogus)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+	}
+
+	err = tx.Commit()
+	log.Println(err)
 }
 
 // Saves a certificate if it is not saved yet
@@ -70,37 +114,47 @@ func saveCertificate(cert *x509.Certificate) {
 func saveHostResult(result HostResult) {
 	address := result.Host().String()
 	certs := result.Certificates()
-	tlsHandshake := result.TLSHandshake
 	starttls := result.HasStarttls()
 	tlsVersion := result.TLSVersion()
 	tlsCipher := result.TLSCipherSuite()
 
-	log.Println(address)
+	// may also be ni
+	var caFingerprints interface{}
 
 	// Save certificates
 	if certs != nil {
-		for _, cert := range tlsHandshake.ServerCertificates.ParsedCertificates {
+		// array for ca-certificate fingerprints
+		fingerprints := make([][]byte, len(certs)-1)
+
+		for i, cert := range certs {
 			saveCertificate(cert)
+			if i > 0 {
+				// the first is the server certificate
+				fingerprints[i-1] = cert.FingerprintSHA1
+			}
 		}
-		// log.Println(certs[0].PublicKeyAlgorithm)
+
+		// Cast into ByteaArray for PostgreSQL
+		bytea := ByteaArray(fingerprints)
+		caFingerprints = &bytea
 	}
 
 	var id int
 	err := dbconn.QueryRow("SELECT id FROM mx_hosts WHERE address = $1", address).Scan(&id)
 
-	params := []interface{}{result.ErrorString(), starttls, tlsVersion, tlsCipher, result.ServerCertificateSHA1(), address}
+	params := []interface{}{result.ErrorString(), starttls, tlsVersion, tlsCipher, result.ServerCertificateSHA1(), caFingerprints, address}
 
 	switch {
 	case err == sql.ErrNoRows:
 		// not yet present
-		_, err := dbconn.Exec("INSERT INTO mx_hosts (error, starttls, tls_version, tls_cipher_suite, certificate_id, updated_at, address) VALUES ($1,$2,$3,$4,$5, NOW(), $6)", params...)
+		_, err := dbconn.Exec("INSERT INTO mx_hosts (error, starttls, tls_version, tls_cipher_suite, certificate_id, ca_certificate_ids, updated_at, address) VALUES ($1,$2,$3,$4,$5,$6, NOW(), $7)", params...)
 		if err != nil {
 			log.Panicln(err)
 		}
 	case err != nil:
 		log.Fatal(err)
 	default:
-		_, err := dbconn.Exec("UPDATE mx_hosts SET error=$1, starttls=$2, tls_version=$3, tls_cipher_suite=$4, certificate_id=$5, updated_at=NOW() WHERE address = $6", params...)
+		_, err := dbconn.Exec("UPDATE mx_hosts SET error=$1, starttls=$2, tls_version=$3, tls_cipher_suite=$4, certificate_id=$5, ca_certificate_ids=$6, updated_at=NOW() WHERE address = $7", params...)
 		if err != nil {
 			log.Panicln(err)
 		}

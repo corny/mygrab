@@ -6,6 +6,7 @@ import (
 	"github.com/miekg/unbound"
 	"log"
 	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -192,7 +193,7 @@ func (proc *DnsProcessor) Lookup(query *DnsQuery) (result DnsResult) {
 	for i, _ := range response.Data {
 		switch record := response.Rr[i].(type) {
 		case *dns.MX:
-			result.append(record.Mx)
+			result.append(strings.TrimSuffix(record.Mx, "."))
 		case *dns.A:
 			result.append(record.A.String())
 		case *dns.AAAA:
