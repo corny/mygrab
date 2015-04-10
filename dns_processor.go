@@ -18,8 +18,8 @@ type DnsQuery struct {
 type DnsResult struct {
 	// The result
 	Results  []string
-	Error    *error
 	Secure   bool
+	Error    error
 	WhyBogus *string
 }
 
@@ -36,29 +36,35 @@ type DnsJobs struct {
 }
 
 type DnsProcessor struct {
-	// map from queries to jobs
+	// maps pending/running queries to jobs
 	jobs map[DnsQuery]*DnsJob
 
-	// mutex to the map
+	// mutex for the map
 	mutex sync.Mutex
 
 	// waiting jobs
 	channel chan *DnsJob
 
+	// wait group for the workers
+	wait sync.WaitGroup
+
 	// context for Unbound
 	unboundCtx *unbound.Unbound
 }
 
-func NewDnsProcessor(workersCount uint) (proc DnsProcessor) {
+func NewDnsProcessor(workersCount uint) *DnsProcessor {
+	proc := &DnsProcessor{}
 	proc.unboundCtx = unbound.New()
 	proc.channel = make(chan *DnsJob, 100)
 	proc.jobs = make(map[DnsQuery]*DnsJob)
+	proc.wait.Add(int(workersCount))
 
 	// Start all workers
 	for i := uint(0); i < workersCount; i++ {
 		go proc.worker()
 	}
-	return
+
+	return proc
 }
 
 // A worker
@@ -73,9 +79,10 @@ func (proc *DnsProcessor) worker() {
 		proc.mutex.Unlock()
 
 		// wake up the waiting routines
-		log.Printf("job finished: %p", job)
+		log.Printf("DNS job finished: %p", job)
 		job.wait.Done()
 	}
+	proc.wait.Done()
 }
 
 // Creates a new job
@@ -92,7 +99,7 @@ func (proc *DnsProcessor) NewJob(domain string, typ dns.Type) *DnsJob {
 		job = &DnsJob{}
 		job.Query = &query
 		job.wait.Add(1)
-		log.Printf("job created %p", job)
+		log.Printf("DNS job created %p", job)
 		proc.jobs[query] = job
 	}
 	proc.mutex.Unlock()
@@ -105,41 +112,51 @@ func (proc *DnsProcessor) NewJob(domain string, typ dns.Type) *DnsJob {
 }
 
 // Creates a group of jobs
-func (proc *DnsProcessor) NewJobs(domains []string, types []dns.Type) (group DnsJobs) {
+func (proc *DnsProcessor) NewJobs(domains []string, types []dns.Type) *DnsJobs {
+	group := &DnsJobs{}
 	for _, domain := range domains {
 		for _, typ := range types {
 			job := proc.NewJob(domain, typ)
-			log.Printf("created: %p", job)
+			log.Printf("DNS created: %p", job)
 			group.append(job)
 		}
 	}
-	return
+	return group
 }
 
-// Closes the internal channel
-// New Jobs will not be accepted any more
+// Closes the internal channel and waits until all workers are done
 func (proc *DnsProcessor) Close() {
 	close(proc.channel)
+	proc.wait.Wait()
 }
 
 // Waits until the query is finished
 func (job *DnsJob) Wait() {
-	log.Printf("waiting for %p", job)
+	log.Printf("DNS waiting for %p", job)
 	job.wait.Wait()
 }
 
 // Waits until all queries in this group are finished
 func (group *DnsJobs) Wait() {
 	for _, job := range group.jobs {
-		log.Println("group wait", job.Query)
+		log.Println("DNS group wait", job.Query)
 		job.wait.Wait()
-		log.Println("group done")
+		log.Println("DNS group done")
 	}
 }
 
 // Appends a new entry to the result
 func (result *DnsResult) append(entry string) {
 	result.Results = append(result.Results, entry)
+}
+
+// The error string or nil
+func (result *DnsResult) ErrorMessage() *string {
+	if result.Error == nil {
+		return nil
+	}
+	str := result.Error.Error()
+	return &str
 }
 
 // Appends a new entry to the result
@@ -179,14 +196,14 @@ func (proc *DnsProcessor) Lookup(query *DnsQuery) (result DnsResult) {
 
 	// error or NXDomain rcode?
 	if err != nil || response.NxDomain {
-		result.Error = &err
+		result.Error = err
 		return
 	}
 
 	// Other erroneous rcode?
 	if response.Rcode != dns.RcodeSuccess {
 		err = errors.New(dns.RcodeToString[response.Rcode])
-		result.Error = &err
+		result.Error = err
 		return
 	}
 

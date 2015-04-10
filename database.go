@@ -32,9 +32,10 @@ func connect(dataSourceName string) {
 
 }
 
-func saveDomain(domain string, result *DnsResult) {
-
-	params := []interface{}{StringArray(result.Results), result.Secure, result.Error, result.WhyBogus, domain}
+func saveDomain(job *DnsJob) {
+	result := job.Result
+	domain := job.Query.Domain
+	params := []interface{}{StringArray(result.Results), result.Secure, result.ErrorMessage(), result.WhyBogus, domain}
 
 	var id int
 	err := dbconn.QueryRow("SELECT 1 FROM domains WHERE name = $1", domain).Scan(&id)
@@ -55,32 +56,50 @@ func saveDomain(domain string, result *DnsResult) {
 	}
 }
 
-func saveMxRecords(hostnames []string, result []*DnsJob) {
+func saveMxAddresses(job *DnsJob) {
 	// TODO better error handling
+	hostname := job.Query.Domain
+	result := job.Result
 
 	tx, err := dbconn.Begin()
-	log.Println(err)
-	_, err = tx.Exec("DELETE FROM mx_records WHERE hostname IN ($1)", strings.Join(hostnames, ","))
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	for _, job := range result {
-		for _, address := range job.Results() {
-			_, err = tx.Exec("INSERT INTO mx_records (hostname, address, dns_secure, dns_error, dns_bogus) VALUES ($1,$2,$3,$4,$5)", job.Query.Domain, address, job.Result.Secure, job.Result.Error, job.Result.WhyBogus)
-			if err != nil {
+	family := 0
+	if job.Query.Type == TypeA {
+		family = 4
+	} else {
+		family = 6
+	}
+
+	log.Println("DELETE", hostname, family)
+	_, err = tx.Exec("DELETE FROM mx_records WHERE hostname=$1 AND family(address)=$2", hostname, family)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, address := range job.Results() {
+		_, err = tx.Exec("INSERT INTO mx_records (hostname, address, dns_secure, dns_error, dns_bogus) VALUES ($1,$2,$3,$4,$5)", hostname, address, false, nil, nil) // result.Secure, result.ErrorMessage(), "result.WhyBogus")
+
+		if err != nil {
+			if strings.Contains(err.Error(), "duplicate key") {
+				log.Println("duplicate key for", hostname, address)
+			} else {
 				log.Fatal(err)
 			}
 		}
+		log.Println(address, result)
 	}
 
-	err = tx.Commit()
-	log.Println(err)
+	if err = tx.Commit(); err != nil {
+		log.Fatal(err)
+	}
 }
 
 // Saves a certificate if it is not saved yet
 func saveCertificate(cert *x509.Certificate) {
 	sha1sum := string(cert.FingerprintSHA1)
-	subject := string(x509.SHA1Fingerprint(cert.RawSubject))
-	issuer := string(x509.SHA1Fingerprint(cert.RawIssuer))
-	pubkey := string(x509.SHA1Fingerprint(cert.RawSubjectPublicKeyInfo))
 
 	// Certificate cached?
 	if _, ok := knownCerts.Get(sha1sum); ok {
@@ -97,7 +116,17 @@ func saveCertificate(cert *x509.Certificate) {
 			log.Panicln(err)
 		}
 
-		_, err = dbconn.Exec("INSERT INTO certificates (id, subject_id, issuer_id, key_id, first_seen_at) VALUES ($1,$2,$3,$4, NOW())", sha1sum, subject, issuer, pubkey)
+		subject := string(x509.SHA1Fingerprint(cert.RawSubject))
+		issuer := string(x509.SHA1Fingerprint(cert.RawIssuer))
+		pubkey := string(x509.SHA1Fingerprint(cert.RawSubjectPublicKeyInfo))
+
+		var validationError *string
+		if cert.ValidationError() != nil {
+			err := cert.ValidationError().Error()
+			validationError = &err
+		}
+
+		_, err = dbconn.Exec("INSERT INTO certificates (id, subject_id, issuer_id, key_id, is_valid, validation_error, is_self_signed, is_ca, first_seen_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8, NOW())", sha1sum, subject, issuer, pubkey, cert.IsValid(), validationError, subject == issuer, cert.IsCA)
 		if err != nil {
 			log.Panicln(err)
 		}
@@ -118,7 +147,7 @@ func saveHostResult(result HostResult) {
 	tlsVersion := result.TLSVersion()
 	tlsCipher := result.TLSCipherSuite()
 
-	// may also be ni
+	// may also be nil
 	var caFingerprints interface{}
 
 	// Save certificates

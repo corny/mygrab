@@ -11,7 +11,7 @@ func UniqueStrings(list []string) []string {
 	}
 
 	// collect keys
-	for _, item := range list {
+	for item, _ := range m {
 		result = append(result, item)
 	}
 	return result
