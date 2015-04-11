@@ -36,17 +36,13 @@ type DnsJobs struct {
 }
 
 type DnsProcessor struct {
+	workers *WorkerPool
+
 	// maps pending/running queries to jobs
 	jobs map[DnsQuery]*DnsJob
 
 	// mutex for the map
 	mutex sync.Mutex
-
-	// waiting jobs
-	channel chan *DnsJob
-
-	// wait group for the workers
-	wait sync.WaitGroup
 
 	// context for Unbound
 	unboundCtx *unbound.Unbound
@@ -54,22 +50,14 @@ type DnsProcessor struct {
 
 func NewDnsProcessor(workersCount uint) *DnsProcessor {
 	proc := &DnsProcessor{}
-	proc.unboundCtx = unbound.New()
-	proc.channel = make(chan *DnsJob, 100)
-	proc.jobs = make(map[DnsQuery]*DnsJob)
-	proc.wait.Add(int(workersCount))
 
-	// Start all workers
-	for i := uint(0); i < workersCount; i++ {
-		go proc.worker()
-	}
+	work := func(item interface{}) {
+		job, ok := item.(*DnsJob)
+		if !ok {
+			log.Fatal("unexpected object:", item)
+		}
 
-	return proc
-}
-
-// A worker
-func (proc *DnsProcessor) worker() {
-	for job := range proc.channel {
+		log.Printf("DNS job starting: %p %s", job, job)
 		result := proc.Lookup(job.Query)
 		job.Result = &result
 
@@ -82,7 +70,12 @@ func (proc *DnsProcessor) worker() {
 		log.Printf("DNS job finished: %p", job)
 		job.wait.Done()
 	}
-	proc.wait.Done()
+
+	proc.workers = NewWorkerPool(workersCount, work)
+	proc.unboundCtx = unbound.New()
+	proc.jobs = make(map[DnsQuery]*DnsJob)
+
+	return proc
 }
 
 // Creates a new job
@@ -105,29 +98,26 @@ func (proc *DnsProcessor) NewJob(domain string, typ dns.Type) *DnsJob {
 	proc.mutex.Unlock()
 
 	if !exist {
-		proc.channel <- job
+		proc.workers.Add(job)
 	}
 
 	return job
 }
 
 // Creates a group of jobs
-func (proc *DnsProcessor) NewJobs(domains []string, types []dns.Type) *DnsJobs {
+func (proc *DnsProcessor) NewJobs(domain string, types []dns.Type) *DnsJobs {
 	group := &DnsJobs{}
-	for _, domain := range domains {
-		for _, typ := range types {
-			job := proc.NewJob(domain, typ)
-			log.Printf("DNS created: %p", job)
-			group.append(job)
-		}
+	for _, typ := range types {
+		job := proc.NewJob(domain, typ)
+		log.Printf("DNS created: %p", job)
+		group.append(job)
 	}
 	return group
 }
 
 // Closes the internal channel and waits until all workers are done
 func (proc *DnsProcessor) Close() {
-	close(proc.channel)
-	proc.wait.Wait()
+	proc.workers.Close()
 }
 
 // Waits until the query is finished
@@ -223,5 +213,5 @@ func (proc *DnsProcessor) Lookup(query *DnsQuery) (result DnsResult) {
 		}
 	}
 
-	return result
+	return
 }

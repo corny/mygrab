@@ -13,12 +13,13 @@ import (
 
 var (
 	zlibConfig           = &zlib.Config{}
-	dnsWorkers      uint = 10
-	zgrabWorkers    uint = 10
-	domainWorkers   uint = 10
+	dnsWorkers      uint = 50
+	zgrabWorkers    uint = 50
+	domainWorkers   uint = 50
 	dnsProcessor         = NewDnsProcessor(dnsWorkers)
 	zgrabProcessor       = NewZgrabProcessor(zgrabWorkers)
 	domainProcessor      = NewDomainProcessor(domainWorkers)
+	resultProcessor      = NewResultProcessor(1)
 )
 
 type Decoder interface {
@@ -50,11 +51,13 @@ func main() {
 	// Read stdin
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
-		domainProcessor.NewJob(scanner.Text())
+		domainProcessor.Add(scanner.Text())
 	}
 
+	//domainProcessor.Close()
 	domainProcessor.Close()
 	dnsProcessor.Close()
 	zgrabProcessor.Close()
+	resultProcessor.Close()
 
 }
