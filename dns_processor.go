@@ -8,6 +8,14 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
+)
+
+const (
+	TypeMX   = dns.Type(dns.TypeMX)
+	TypeA    = dns.Type(dns.TypeA)
+	TypeAAAA = dns.Type(dns.TypeAAAA)
+	TypeTLSA = dns.Type(dns.TypeTLSA)
 )
 
 type DnsQuery struct {
@@ -46,6 +54,10 @@ type DnsProcessor struct {
 
 	// context for Unbound
 	unboundCtx *unbound.Unbound
+
+	// Go DNS client
+	dnsClient   dns.Client
+	dnsResolver string
 }
 
 func NewDnsProcessor(workersCount uint) *DnsProcessor {
@@ -57,7 +69,6 @@ func NewDnsProcessor(workersCount uint) *DnsProcessor {
 			log.Fatal("unexpected object:", item)
 		}
 
-		log.Printf("DNS job starting: %p %s", job, job)
 		result := proc.Lookup(job.Query)
 		job.Result = &result
 
@@ -67,7 +78,6 @@ func NewDnsProcessor(workersCount uint) *DnsProcessor {
 		proc.mutex.Unlock()
 
 		// wake up the waiting routines
-		log.Printf("DNS job finished: %p", job)
 		job.wait.Done()
 	}
 
@@ -78,9 +88,13 @@ func NewDnsProcessor(workersCount uint) *DnsProcessor {
 	return proc
 }
 
+func (proc *DnsProcessor) Configure(resolver string, timeout uint) {
+	proc.dnsClient.ReadTimeout = time.Duration(timeout) * time.Second
+	proc.dnsResolver = resolver
+}
+
 // Creates a new job
 func (proc *DnsProcessor) NewJob(domain string, typ dns.Type) *DnsJob {
-
 	var query = DnsQuery{Domain: domain, Type: typ}
 	var job *DnsJob
 	var exist bool
@@ -92,7 +106,6 @@ func (proc *DnsProcessor) NewJob(domain string, typ dns.Type) *DnsJob {
 		job = &DnsJob{}
 		job.Query = &query
 		job.wait.Add(1)
-		log.Printf("DNS job created %p", job)
 		proc.jobs[query] = job
 	}
 	proc.mutex.Unlock()
@@ -109,7 +122,6 @@ func (proc *DnsProcessor) NewJobs(domain string, types []dns.Type) *DnsJobs {
 	group := &DnsJobs{}
 	for _, typ := range types {
 		job := proc.NewJob(domain, typ)
-		log.Printf("DNS created: %p", job)
 		group.append(job)
 	}
 	return group
@@ -122,22 +134,35 @@ func (proc *DnsProcessor) Close() {
 
 // Waits until the query is finished
 func (job *DnsJob) Wait() {
-	log.Printf("DNS waiting for %p", job)
 	job.wait.Wait()
 }
 
 // Waits until all queries in this group are finished
 func (group *DnsJobs) Wait() {
 	for _, job := range group.jobs {
-		log.Println("DNS group wait", job.Query)
 		job.wait.Wait()
-		log.Println("DNS group done")
 	}
 }
 
 // Appends a new entry to the result
 func (result *DnsResult) append(entry string) {
 	result.Results = append(result.Results, entry)
+}
+
+func (result *DnsResult) appendRR(rr interface{}) {
+	switch record := rr.(type) {
+	case *dns.MX:
+		result.append(strings.ToLower(strings.TrimSuffix(record.Mx, ".")))
+	case *dns.A:
+		result.append(record.A.String())
+	case *dns.AAAA:
+		result.append(record.AAAA.String())
+	case *dns.TLSA:
+		result.append(strconv.Itoa(int(record.Usage)) +
+			" " + strconv.Itoa(int(record.Selector)) +
+			" " + strconv.Itoa(int(record.MatchingType)) +
+			" " + record.Certificate)
+	}
 }
 
 // The error string or nil
@@ -175,7 +200,48 @@ func (group *DnsJobs) Results() []string {
 // Does the lookup
 func (proc *DnsProcessor) Lookup(query *DnsQuery) (result DnsResult) {
 
-	// execute the query
+	if query.Type == TypeTLSA {
+		// Use unbound (slow) for TLSA lookups
+		return proc.lookupUnbound(query)
+	} else {
+		// Use go-DNS (fast) for all other lookups
+		return proc.lookupDns(query)
+	}
+}
+
+// Loookup using Go-DNS
+func (proc *DnsProcessor) lookupDns(query *DnsQuery) (result DnsResult) {
+	m := &dns.Msg{}
+	m.RecursionDesired = true
+	m.SetQuestion(query.Domain, uint16(query.Type))
+
+	// Execute the query
+	response, _, err := proc.dnsClient.Exchange(m, proc.dnsResolver)
+
+	// error or NXDomain rcode?
+	if err != nil || response.Rcode == dns.RcodeNameError {
+		result.Error = err
+		return
+	}
+
+	// Other erroneous rcode?
+	if response.Rcode != dns.RcodeSuccess {
+		result.Error = errors.New(dns.RcodeToString[response.Rcode])
+		return
+	}
+
+	// Append results
+	for _, rr := range response.Answer {
+		result.appendRR(rr)
+	}
+
+	return
+}
+
+// Loookup using Unbound
+// offers more information on DNSSEC
+func (proc *DnsProcessor) lookupUnbound(query *DnsQuery) (result DnsResult) {
+	// Execute the query
 	response, err := proc.unboundCtx.Resolve(query.Domain, uint16(query.Type), uint16(dns.ClassINET))
 
 	result.Secure = response.Secure
@@ -192,25 +258,13 @@ func (proc *DnsProcessor) Lookup(query *DnsQuery) (result DnsResult) {
 
 	// Other erroneous rcode?
 	if response.Rcode != dns.RcodeSuccess {
-		err = errors.New(dns.RcodeToString[response.Rcode])
-		result.Error = err
+		result.Error = errors.New(dns.RcodeToString[response.Rcode])
 		return
 	}
 
+	// Append results
 	for i, _ := range response.Data {
-		switch record := response.Rr[i].(type) {
-		case *dns.MX:
-			result.append(strings.TrimSuffix(record.Mx, "."))
-		case *dns.A:
-			result.append(record.A.String())
-		case *dns.AAAA:
-			result.append(record.AAAA.String())
-		case *dns.TLSA:
-			result.append(strconv.Itoa(int(record.Usage)) +
-				" " + strconv.Itoa(int(record.Selector)) +
-				" " + strconv.Itoa(int(record.MatchingType)) +
-				" " + record.Certificate)
-		}
+		result.appendRR(response.Rr[i])
 	}
 
 	return

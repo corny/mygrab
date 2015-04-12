@@ -5,6 +5,7 @@ import (
 	"reflect"
 )
 
+// Stores results in the database
 type ResultProcessor struct {
 	workers *WorkerPool
 }

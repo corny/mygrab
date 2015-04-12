@@ -6,12 +6,6 @@ import (
 	"net"
 )
 
-const (
-	TypeMX   = dns.Type(dns.TypeMX)
-	TypeA    = dns.Type(dns.TypeA)
-	TypeAAAA = dns.Type(dns.TypeAAAA)
-)
-
 var (
 	addressTypes = []dns.Type{TypeA, dns.Type(TypeAAAA)}
 )

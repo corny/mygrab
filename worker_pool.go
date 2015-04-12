@@ -1,16 +1,21 @@
 package main
 
 import (
-	"log"
 	"sync"
 )
 
+// The worker function receives any object and returns nothing
 type WorkerFunc func(interface{})
 
 type WorkerPool struct {
+	// channel for pending jobs
 	channel chan interface{}
-	wg      sync.WaitGroup
-	work    WorkerFunc
+
+	// WaitGroup to wait until all workers are done
+	wg sync.WaitGroup
+
+	// The function that does the work
+	work WorkerFunc
 }
 
 func NewWorkerPool(workersCount uint, work WorkerFunc) *WorkerPool {
@@ -28,7 +33,6 @@ func NewWorkerPool(workersCount uint, work WorkerFunc) *WorkerPool {
 
 func (proc *WorkerPool) worker() {
 	for obj := range proc.channel {
-		log.Println("work:", obj)
 		proc.work(obj)
 	}
 	proc.wg.Done()
@@ -36,8 +40,6 @@ func (proc *WorkerPool) worker() {
 
 // Adds a new object to the channel
 func (proc *WorkerPool) Add(obj interface{}) {
-
-	log.Printf("add: %p %s", &obj, obj)
 	proc.channel <- obj
 }
 

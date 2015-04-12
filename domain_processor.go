@@ -4,6 +4,7 @@ import (
 	"log"
 )
 
+// Does MX Lookups
 type DomainProcessor struct {
 	workers *WorkerPool
 }
@@ -15,14 +16,16 @@ func NewDomainProcessor(workersCount uint) *DomainProcessor {
 			log.Fatal("unexpected object:", item)
 		}
 
+		log.Println(domain)
+
 		// Do the A/AAAA lookups
-		mxAddresses := dnsProcessor.NewJob(domain, TypeMX)
+		mxAddresses := dnsProcessor.NewJob(domain+".", TypeMX)
 		mxAddresses.Wait()
 
 		resultProcessor.Add(mxAddresses)
 	}
-	proc := &DomainProcessor{workers: NewWorkerPool(workersCount, work)}
-	return proc
+
+	return &DomainProcessor{workers: NewWorkerPool(workersCount, work)}
 }
 
 // Creates a new job
