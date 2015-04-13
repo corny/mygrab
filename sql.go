@@ -11,8 +11,12 @@ type StringArray []string
 type ByteaArray [][]byte
 
 func (a StringArray) Value() (driver.Value, error) {
-	// FIXME add escaping
-	return "{" + strings.Join(a, ",") + "}", nil
+	if len(a) == 0 {
+		return "{}", nil
+	} else {
+		// FIXME add escaping
+		return "{\"" + strings.Join(a, "\",\"") + "\"}", nil
+	}
 }
 
 func (a ByteaArray) Value() (driver.Value, error) {
