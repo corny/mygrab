@@ -18,7 +18,7 @@ type ZgrabProcessor struct {
 func NewZgrabProcessor(workersCount uint) *ZgrabProcessor {
 	work := func(item interface{}) {
 		target, _ := item.(*zlib.GrabTarget)
-		result := NewHostResult(*target)
+		result := NewMxHost(*target)
 		resultProcessor.Add(&result)
 	}
 

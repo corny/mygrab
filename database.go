@@ -139,39 +139,14 @@ func saveCertificate(cert *x509.Certificate) {
 
 }
 
-// Saves a HostResult in the database
-func saveHostResult(result HostResult) {
-	address := result.Host().String()
-	certs := result.Certificates()
-	starttls := result.HasStarttls()
-	tlsVersion := result.TLSVersion()
-	tlsCipher := result.TLSCipherSuite()
-
-	// may also be nil
-	var caFingerprints interface{}
-
-	// Save certificates
-	if certs != nil {
-		// array for ca-certificate fingerprints
-		fingerprints := make([][]byte, len(certs)-1)
-
-		for i, cert := range certs {
-			saveCertificate(cert)
-			if i > 0 {
-				// the first is the server certificate
-				fingerprints[i-1] = cert.FingerprintSHA1
-			}
-		}
-
-		// Cast into ByteaArray for PostgreSQL
-		bytea := ByteaArray(fingerprints)
-		caFingerprints = &bytea
-	}
+// Saves a MxHost in the database
+func saveMxHost(result MxHost) {
+	address := result.address
 
 	var id int
 	err := dbconn.QueryRow("SELECT id FROM mx_hosts WHERE address = $1", address).Scan(&id)
 
-	params := []interface{}{result.ErrorString(), starttls, tlsVersion, tlsCipher, result.ServerCertificateSHA1(), caFingerprints, address}
+	params := []interface{}{result.Error, result.starttls, result.tlsVersion, result.tlsCipherSuite, result.serverFingerprint, ByteaArray(result.caFingerprints), address}
 
 	switch {
 	case err == sql.ErrNoRows:

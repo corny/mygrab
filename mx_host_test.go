@@ -27,7 +27,7 @@ func TestSimplifyStarttlsError(t *testing.T) {
 
 func TestTimeout(t *testing.T) {
 	target := zlib.GrabTarget{Addr: net.ParseIP("192.168.254.254")}
-	result := NewHostResult(target)
+	result := NewMxHost(target)
 
 	if result.Error.Error() != "i/o timeout" {
 		t.Fatal("an unexpected error occured:", result.Error)
@@ -41,7 +41,7 @@ func TestTimeout(t *testing.T) {
 
 func TestWithStarttls(t *testing.T) {
 	target := zlib.GrabTarget{Addr: net.ParseIP("109.69.71.161")}
-	result := NewHostResult(target)
+	result := NewMxHost(target)
 
 	if *result.HasStarttls() != true {
 		t.Fatal("host should have starttls")
@@ -62,7 +62,7 @@ func TestWithStarttls(t *testing.T) {
 
 func TestWithoutStarttls(t *testing.T) {
 	target := zlib.GrabTarget{Addr: net.ParseIP("198.23.62.105")}
-	result := NewHostResult(target)
+	result := NewMxHost(target)
 
 	if *result.HasStarttls() != false {
 		t.Fatal("host should not have starttls")
