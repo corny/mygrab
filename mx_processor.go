@@ -2,7 +2,6 @@ package main
 
 import (
 	"github.com/miekg/dns"
-	"github.com/zmap/zgrab/zlib"
 	"net"
 )
 
@@ -30,7 +29,8 @@ func NewMxProcessor(workersCount uint) *MxProcessor {
 
 		// Do the bannergrabs
 		for _, addr := range addresses {
-			zgrabProcessor.NewJob(&zlib.GrabTarget{Addr: net.ParseIP(addr)})
+			ip := net.ParseIP(addr)
+			zgrabProcessor.NewJob(&ip)
 		}
 	}
 

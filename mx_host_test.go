@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"github.com/zmap/zgrab/zlib"
 	"net"
 	"testing"
 )
@@ -26,24 +25,24 @@ func TestSimplifyStarttlsError(t *testing.T) {
 }
 
 func TestTimeout(t *testing.T) {
-	target := zlib.GrabTarget{Addr: net.ParseIP("192.168.254.254")}
-	result := NewMxHost(target)
+	address := net.ParseIP("192.168.254.254")
+	result := NewMxHost(address)
 
-	if result.Error.Error() != "i/o timeout" {
+	if *result.Error != "i/o timeout" {
 		t.Fatal("an unexpected error occured:", result.Error)
 	}
 
-	if result.HasStarttls() != nil {
+	if result.starttls != nil {
 		t.Fatal("host should not have starttls")
 	}
 
 }
 
 func TestWithStarttls(t *testing.T) {
-	target := zlib.GrabTarget{Addr: net.ParseIP("109.69.71.161")}
-	result := NewMxHost(target)
+	address := net.ParseIP("109.69.71.161")
+	result := NewMxHost(address)
 
-	if *result.HasStarttls() != true {
+	if *result.starttls != true {
 		t.Fatal("host should have starttls")
 	}
 
@@ -55,16 +54,16 @@ func TestWithStarttls(t *testing.T) {
 		t.Fatal("DNSNames missing")
 	}
 
-	if result.ServerCertificateSHA1() == nil {
+	if result.serverFingerprint == nil {
 		t.Fatal("expected not nil")
 	}
 }
 
 func TestWithoutStarttls(t *testing.T) {
-	target := zlib.GrabTarget{Addr: net.ParseIP("198.23.62.105")}
-	result := NewMxHost(target)
+	address := net.ParseIP("198.23.62.105")
+	result := NewMxHost(address)
 
-	if *result.HasStarttls() != false {
+	if *result.starttls != false {
 		t.Fatal("host should not have starttls")
 	}
 
@@ -72,7 +71,7 @@ func TestWithoutStarttls(t *testing.T) {
 		t.Fatal("nil expected")
 	}
 
-	if result.ServerCertificateSHA1() != nil {
+	if result.serverFingerprint != nil {
 		t.Fatal("nil expected")
 	}
 

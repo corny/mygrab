@@ -67,9 +67,9 @@ func simplifyError(err error) error {
 }
 
 // Creates a ZgrabResult
-func NewMxHost(target zlib.GrabTarget) MxHost {
-	result := MxHost{address: target.Addr}
-	result.grab = zlib.GrabBanner(zlibConfig, &target)
+func NewMxHost(address net.IP) MxHost {
+	result := MxHost{address: address}
+	result.grab = zlib.GrabBanner(zlibConfig, &zlib.GrabTarget{Addr: address})
 	now := time.Now()
 	result.UpdatedAt = &now
 
