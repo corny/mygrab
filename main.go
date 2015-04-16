@@ -16,11 +16,11 @@ var (
 	socketPath      string
 	zlibConfig           = &zlib.Config{}
 	dnsResolver          = "8.8.8.8:53"
-	dnsWorkers      uint = 100
+	dnsWorkers      uint = 500
 	dnsTimeout      uint = 10 // seconds
 	zgrabWorkers    uint = 500
-	domainWorkers   uint = 100 // should be more at least as many as dnsWorkers
 	mxWorkers       uint = 250 // should at least as many as dnsWorkers
+	domainWorkers   uint = 250 // should at least as many as dnsWorkers
 	resultWorkers   uint = 2
 	unboundDebug    uint = 0
 	dbname          string
