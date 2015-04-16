@@ -19,6 +19,8 @@ func NewResultProcessor(workersCount uint) *ResultProcessor {
 			}
 		case *DnsJob:
 			saveDomain(res)
+		case *MxHost:
+			saveMxHost(res)
 		default:
 			log.Fatal("unknown db result:", reflect.TypeOf(res))
 		}

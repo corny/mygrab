@@ -7,6 +7,7 @@ import (
 	"github.com/zmap/zgrab/ztools/ztls"
 	"net"
 	"strings"
+	"time"
 )
 
 // Encapsulates the zlib.Grab struct
@@ -15,13 +16,14 @@ type MxHost struct {
 	grab              *zlib.Grab
 	TLSHandshake      *ztls.ServerHandshake
 	starttls          *bool
-	serverFingerprint []byte
+	serverFingerprint *[]byte
 	caFingerprints    [][]byte
 	tlsVersion        *string
 	tlsCipherSuite    *string
 	connect           *zlib.ConnectEvent
 	MailBanner        string
-	Error             error
+	Error             *string
+	UpdatedAt         *time.Time
 }
 
 // The received certificates
@@ -66,7 +68,10 @@ func simplifyError(err error) error {
 
 // Creates a ZgrabResult
 func NewMxHost(target zlib.GrabTarget) MxHost {
-	result := MxHost{address: target.Addr, grab: zlib.GrabBanner(zlibConfig, &target)}
+	result := MxHost{address: target.Addr}
+	result.grab = zlib.GrabBanner(zlibConfig, &target)
+	now := time.Now()
+	result.UpdatedAt = &now
 
 	// Loop over the banner log
 	for _, entry := range result.grab.Log {
@@ -84,7 +89,8 @@ func NewMxHost(target zlib.GrabTarget) MxHost {
 
 		if entry.Error != nil {
 			// If an error occurs it we expect the entry to be the last
-			result.Error = simplifyError(entry.Error)
+			err := simplifyError(entry.Error).Error()
+			result.Error = &err
 		}
 	}
 
@@ -102,9 +108,9 @@ func NewMxHost(target zlib.GrabTarget) MxHost {
 	if certs != nil {
 		result.caFingerprints = make([][]byte, len(certs)-1)
 		for i, cert := range certs {
-			sha1 := cert.FingerprintSHA1
+			sha1 := []byte(cert.FingerprintSHA1)
 			if i == 0 {
-				result.serverFingerprint = sha1
+				result.serverFingerprint = &sha1
 			} else {
 				result.caFingerprints[i-1] = sha1
 			}

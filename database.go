@@ -140,25 +140,25 @@ func saveCertificate(cert *x509.Certificate) {
 }
 
 // Saves a MxHost in the database
-func saveMxHost(result MxHost) {
-	address := result.address
+func saveMxHost(result *MxHost) {
+	address := result.address.String()
 
 	var id int
 	err := dbconn.QueryRow("SELECT id FROM mx_hosts WHERE address = $1", address).Scan(&id)
 
-	params := []interface{}{result.Error, result.starttls, result.tlsVersion, result.tlsCipherSuite, result.serverFingerprint, ByteaArray(result.caFingerprints), address}
+	params := []interface{}{result.Error, result.starttls, result.tlsVersion, result.tlsCipherSuite, result.serverFingerprint, ByteaArray(result.caFingerprints), result.UpdatedAt, address}
 
 	switch {
 	case err == sql.ErrNoRows:
 		// not yet present
-		_, err := dbconn.Exec("INSERT INTO mx_hosts (error, starttls, tls_version, tls_cipher_suite, certificate_id, ca_certificate_ids, updated_at, address) VALUES ($1,$2,$3,$4,$5,$6, NOW(), $7)", params...)
+		_, err := dbconn.Exec("INSERT INTO mx_hosts (error, starttls, tls_version, tls_cipher_suite, certificate_id, ca_certificate_ids, updated_at, address) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)", params...)
 		if err != nil {
 			log.Panicln(err)
 		}
 	case err != nil:
 		log.Fatal(err)
 	default:
-		_, err := dbconn.Exec("UPDATE mx_hosts SET error=$1, starttls=$2, tls_version=$3, tls_cipher_suite=$4, certificate_id=$5, ca_certificate_ids=$6, updated_at=NOW() WHERE address = $7", params...)
+		_, err := dbconn.Exec("UPDATE mx_hosts SET error=$1, starttls=$2, tls_version=$3, tls_cipher_suite=$4, certificate_id=$5, ca_certificate_ids=$6, updated_at=$7 WHERE address = $8", params...)
 		if err != nil {
 			log.Panicln(err)
 		}
