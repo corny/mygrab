@@ -41,3 +41,8 @@ func NewMxProcessor(workersCount uint) *MxProcessor {
 func (proc *MxProcessor) NewJob(hostname string) {
 	proc.workers.Add(hostname)
 }
+
+// Creates a new job
+func (proc *MxProcessor) Close() {
+	proc.workers.Close()
+}

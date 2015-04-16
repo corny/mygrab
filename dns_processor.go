@@ -213,7 +213,7 @@ func (proc *DnsProcessor) Lookup(query *DnsQuery) (result DnsResult) {
 func (proc *DnsProcessor) lookupDns(query *DnsQuery) (result DnsResult) {
 	m := &dns.Msg{}
 	m.RecursionDesired = true
-	m.SetQuestion(query.Domain, uint16(query.Type))
+	m.SetQuestion(query.Domain+".", uint16(query.Type))
 
 	// Execute the query
 	response, _, err := proc.dnsClient.Exchange(m, proc.dnsResolver)

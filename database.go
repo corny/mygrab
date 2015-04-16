@@ -57,9 +57,7 @@ func saveDomain(job *DnsJob) {
 }
 
 func saveMxAddresses(job *DnsJob) {
-	// TODO better error handling
 	hostname := job.Query.Domain
-	result := job.Result
 
 	tx, err := dbconn.Begin()
 	if err != nil {
@@ -73,23 +71,24 @@ func saveMxAddresses(job *DnsJob) {
 		family = 6
 	}
 
-	log.Println("DELETE", hostname, family)
 	_, err = tx.Exec("DELETE FROM mx_records WHERE hostname=$1 AND family(address)=$2", hostname, family)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	for _, address := range job.Results() {
+	for _, address := range UniqueStrings(job.Results()) {
 		_, err = tx.Exec("INSERT INTO mx_records (hostname, address, dns_secure, dns_error, dns_bogus) VALUES ($1,$2,$3,$4,$5)", hostname, address, false, nil, nil) // result.Secure, result.ErrorMessage(), "result.WhyBogus")
 
 		if err != nil {
 			if strings.Contains(err.Error(), "duplicate key") {
+				// Just a race condition
 				log.Println("duplicate key for", hostname, address)
 			} else {
 				log.Fatal(err)
 			}
+			tx.Rollback()
+			return
 		}
-		log.Println(address, result)
 	}
 
 	if err = tx.Commit(); err != nil {

@@ -20,12 +20,14 @@ var (
 	dnsTimeout      uint = 10 // seconds
 	zgrabWorkers    uint = 500
 	domainWorkers   uint = 100 // should be more at least as many as dnsWorkers
+	mxWorkers       uint = 250 // should at least as many as dnsWorkers
 	resultWorkers   uint = 2
 	unboundDebug    uint = 0
 	dbname          string
 	dnsProcessor    *DnsProcessor
 	zgrabProcessor  *ZgrabProcessor
 	domainProcessor *DomainProcessor
+	mxProcessor     *MxProcessor
 	resultProcessor *ResultProcessor
 )
 
@@ -50,6 +52,7 @@ func main() {
 	flag.UintVar(&dnsTimeout, "dnsTimeout", dnsTimeout, "DNS timeout in seconds")
 	flag.StringVar(&socketPath, "socket", "", "Read from a socket instead of stdin")
 	flag.UintVar(&dnsWorkers, "dnsWorkers", dnsWorkers, "Number of dns workers")
+	flag.UintVar(&mxWorkers, "mxWorkers", mxWorkers, "Number of mx workers")
 	flag.UintVar(&zgrabWorkers, "zgrabWorkers", zgrabWorkers, "Number of zgrab workers")
 	flag.UintVar(&domainWorkers, "domainWorkers", domainWorkers, "Number of dns workers")
 	flag.UintVar(&resultWorkers, "resultWorkers", resultWorkers, "Number of result workers that store results in the database")
@@ -63,7 +66,7 @@ func main() {
 		flag.PrintDefaults()
 		fmt.Fprintln(os.Stderr, "\nActions:\n")
 		fmt.Fprintln(os.Stderr, "  import-domains: Read domains from stdin for MX lookups")
-		fmt.Fprintln(os.Stderr, "  domains-to-mx: Read mx records from the domains table")
+		fmt.Fprintln(os.Stderr, "  resolve-mx: Read mx records from the domains table and resolve them to A/AAAA records")
 		os.Exit(1)
 	}
 
@@ -71,6 +74,7 @@ func main() {
 	zgrabProcessor = NewZgrabProcessor(zgrabWorkers)
 	domainProcessor = NewDomainProcessor(domainWorkers)
 	resultProcessor = NewResultProcessor(resultWorkers)
+	mxProcessor = NewMxProcessor(mxWorkers)
 
 	// Configure DNS
 	dnsProcessor.Configure(dnsResolver, dnsTimeout)
@@ -93,6 +97,8 @@ func main() {
 		for scanner.Scan() {
 			domainProcessor.Add(scanner.Text())
 		}
+	case "resolve-mx":
+		resolveDomainMxHosts()
 	default:
 		fmt.Fprintln(os.Stderr, "Unknown action:", action)
 	}
@@ -101,6 +107,7 @@ func main() {
 }
 
 func stopProcessors() {
+	mxProcessor.Close()
 	domainProcessor.Close()
 	dnsProcessor.Close()
 	zgrabProcessor.Close()
