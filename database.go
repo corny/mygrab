@@ -32,6 +32,29 @@ func connect(dataSourceName string) {
 
 }
 
+// Reads mx_hosts from the domains table and passes them to the MxProcessor
+func resolveDomainMxHosts() {
+	log.Println("load mx_hosts from domains")
+	rows, err := dbconn.Query("SELECT DISTINCT unnest(mx_hosts) FROM domains")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var hostname string
+		if err := rows.Scan(&hostname); err != nil {
+			log.Fatal(err)
+		}
+		mxProcessor.NewJob(hostname)
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Fatal(err)
+	}
+
+}
+
 func saveDomain(job *DnsJob) {
 	result := job.Result
 	domain := job.Query.Domain
