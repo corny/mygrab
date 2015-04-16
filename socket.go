@@ -37,6 +37,8 @@ func echoServer(c net.Conn) {
 		if err != nil {
 			log.Println("write error:", err)
 		}
+
+		c.Write([]byte("\n"))
 	}
 
 	c.Close()

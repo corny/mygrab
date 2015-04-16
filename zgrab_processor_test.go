@@ -2,24 +2,41 @@ package main
 
 import (
 	"github.com/hashicorp/golang-lru"
-	"net"
 	"testing"
 )
+
+func TestZgrabConcurrency(t *testing.T) {
+	processor := NewZgrabProcessor(0)
+	targetA := "127.0.0.1"
+	targetB := "127.0.0.1"
+
+	processor.NewJob(targetA)
+	processor.NewJob(targetB)
+
+	if processor.concurrentHits != 1 {
+		t.Fatal("invalid concurrent hits: ", processor.concurrentHits)
+	}
+
+	length := len(processor.workers.channel)
+	if length != 1 {
+		t.Fatal("invalid channel length: ", length)
+	}
+}
 
 func TestZgrabCache(t *testing.T) {
 	resultProcessor = NewResultProcessor(0)
 	processor := NewZgrabProcessor(1)
-	targetA := net.ParseIP("127.0.0.1")
-	targetB := net.ParseIP("127.0.0.1")
+	targetA := "127.0.0.1"
+	targetB := "127.0.0.1"
 
-	processor.NewJob(&targetA)
+	processor.NewJob(targetA)
 	processor.Close()
 
 	if processor.cacheMisses != 1 {
 		t.Fatal("invalid cache misses: ", processor.cacheMisses)
 	}
 
-	processor.NewJob(&targetB)
+	processor.NewJob(targetB)
 
 	if processor.cacheHits != 1 {
 		t.Fatal("invalid cache hits: ", processor.cacheHits)
@@ -31,11 +48,11 @@ func TestZgrabCache(t *testing.T) {
 
 func TestLruCache(t *testing.T) {
 	cache, _ := lru.New(10)
-	targetA := net.ParseIP("127.0.0.1")
-	targetB := net.ParseIP("127.0.0.1")
+	targetA := "127.0.0.1"
+	targetB := "127.0.0.1"
 
-	cache.Add(targetA.String(), "foo")
-	val, _ := cache.Get(targetB.String())
+	cache.Add(targetA, "foo")
+	val, _ := cache.Get(targetB)
 
 	str, _ := val.(string)
 

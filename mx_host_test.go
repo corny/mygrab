@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"net"
 	"testing"
 )
 
@@ -25,7 +24,7 @@ func TestSimplifyStarttlsError(t *testing.T) {
 }
 
 func TestTimeout(t *testing.T) {
-	address := net.ParseIP("192.168.254.254")
+	address := "192.168.254.254"
 	result := NewMxHost(address)
 
 	if *result.Error != "i/o timeout" {
@@ -39,7 +38,7 @@ func TestTimeout(t *testing.T) {
 }
 
 func TestWithStarttls(t *testing.T) {
-	address := net.ParseIP("109.69.71.161")
+	address := "109.69.71.161"
 	result := NewMxHost(address)
 
 	if *result.starttls != true {
@@ -60,7 +59,7 @@ func TestWithStarttls(t *testing.T) {
 }
 
 func TestWithoutStarttls(t *testing.T) {
-	address := net.ParseIP("198.23.62.105")
+	address := "198.23.62.105"
 	result := NewMxHost(address)
 
 	if *result.starttls != false {

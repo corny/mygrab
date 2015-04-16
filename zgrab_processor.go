@@ -3,7 +3,6 @@ package main
 import (
 	"github.com/hashicorp/golang-lru"
 	"log"
-	"net"
 	"sync"
 	"time"
 )
@@ -18,7 +17,7 @@ const (
 
 type ZgrabProcessor struct {
 	// map for active (pending/running) jobs
-	jobs map[*net.IP]bool
+	jobs map[string]bool
 
 	// LRU cache to reduce database load
 	cache *lru.Cache
@@ -39,17 +38,21 @@ func NewZgrabProcessor(workersCount uint) *ZgrabProcessor {
 	proc := &ZgrabProcessor{}
 
 	work := func(item interface{}) {
-		address, _ := item.(*net.IP)
+		address, ok := item.(*string)
+		if !ok {
+			log.Panic("invalid cast")
+		}
+
 		result := NewMxHost(*address)
 
 		// Lock
 		proc.mutex.Lock()
 
 		// Add to cache
-		proc.cache.Add(address.String(), &result)
+		proc.cache.Add(*address, &result)
 
 		// Remove from active jobs map
-		delete(proc.jobs, address)
+		delete(proc.jobs, *address)
 
 		// Unlock
 		proc.mutex.Unlock()
@@ -57,7 +60,7 @@ func NewZgrabProcessor(workersCount uint) *ZgrabProcessor {
 		resultProcessor.Add(&result)
 	}
 	proc.workers = NewWorkerPool(workersCount, work)
-	proc.jobs = make(map[*net.IP]bool)
+	proc.jobs = make(map[string]bool)
 
 	// Initialize cache
 	if proc.cache, err = lru.New(zgrabCacheSize); err != nil {
@@ -68,18 +71,18 @@ func NewZgrabProcessor(workersCount uint) *ZgrabProcessor {
 }
 
 // Creates a new job
-func (proc *ZgrabProcessor) NewJob(address *net.IP) {
+func (proc *ZgrabProcessor) NewJob(address string) {
 	exist := false
 
 	proc.mutex.Lock()
 
 	// Does the address exist in the cache?
-	if obj, ok := proc.cache.Get(address.String()); ok {
+	if obj, ok := proc.cache.Get(address); ok {
 		host, _ := obj.(*MxHost)
 
 		if time.Since(*host.UpdatedAt) > zgrabTTL {
 			// Cache is outdated
-			proc.cache.Remove(address.String())
+			proc.cache.Remove(address)
 			proc.cacheExpiries += 1
 			log.Println(address, "in cache and outdated")
 		} else {
@@ -97,7 +100,9 @@ func (proc *ZgrabProcessor) NewJob(address *net.IP) {
 		// Is there already an active job with the same address?
 		if _, exist = proc.jobs[address]; exist {
 			proc.concurrentHits += 1
+			log.Println(address, "EXISTS in map")
 		} else {
+			log.Println(address, "not exists in map")
 			// Add to active jobs map
 			proc.jobs[address] = true
 		}
@@ -106,7 +111,7 @@ func (proc *ZgrabProcessor) NewJob(address *net.IP) {
 	proc.mutex.Unlock()
 
 	if !exist {
-		proc.workers.Add(address)
+		proc.workers.Add(&address)
 	}
 }
 
