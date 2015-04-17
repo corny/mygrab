@@ -40,7 +40,7 @@ func NewZgrabProcessor(workersCount uint) *ZgrabProcessor {
 	work := func(item interface{}) {
 		address, ok := item.(*string)
 		if !ok {
-			log.Panic("invalid cast")
+			log.Panic("unexpected object:", address)
 		}
 
 		result := NewMxHost(*address)
@@ -84,15 +84,12 @@ func (proc *ZgrabProcessor) NewJob(address string) {
 			// Cache is outdated
 			proc.cache.Remove(address)
 			proc.cacheExpiries += 1
-			log.Println(address, "in cache and outdated")
 		} else {
 			// nothing to do
 			exist = true
 			proc.cacheHits += 1
-			log.Println(address, "in cache and valid")
 		}
 	} else {
-		log.Println(address, "not in cache")
 		proc.cacheMisses += 1
 	}
 
@@ -100,9 +97,7 @@ func (proc *ZgrabProcessor) NewJob(address string) {
 		// Is there already an active job with the same address?
 		if _, exist = proc.jobs[address]; exist {
 			proc.concurrentHits += 1
-			log.Println(address, "EXISTS in map")
 		} else {
-			log.Println(address, "not exists in map")
 			// Add to active jobs map
 			proc.jobs[address] = true
 		}
