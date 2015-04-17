@@ -43,11 +43,12 @@ func init() {
 	zlibConfig.Banners = true
 	zlibConfig.EHLO = true
 	zlibConfig.Timeout = time.Duration(10) * time.Second
+	zlibConfig.EHLODomain, _ = os.Hostname()
 }
 
 func main() {
 
-	flag.StringVar(&zlibConfig.EHLODomain, "ehlo", "example.com", "Send an EHLO with the specified domain (implies --smtp)")
+	flag.StringVar(&zlibConfig.EHLODomain, "ehlo", zlibConfig.EHLODomain, "Send an EHLO with the specified domain (implies --smtp)")
 	flag.StringVar(&dnsResolver, "dnsResolver", dnsResolver, "DNS resolver address")
 	flag.UintVar(&dnsTimeout, "dnsTimeout", dnsTimeout, "DNS timeout in seconds")
 	flag.StringVar(&socketPath, "socket", "", "Read from a socket instead of stdin")
