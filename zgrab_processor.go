@@ -16,9 +16,17 @@ const (
 	zgrabCacheSize = 1024 * 10
 )
 
+type ZgrabJob struct {
+	// waitGroup for the waiting routines
+	wait sync.WaitGroup
+
+	Address net.IP
+	Result  *MxHost
+}
+
 type ZgrabProcessor struct {
 	// map for active (pending/running) jobs
-	jobs map[string]bool
+	jobs map[string]*ZgrabJob
 
 	// LRU cache to reduce database load
 	cache *lru.Cache
@@ -39,22 +47,23 @@ func NewZgrabProcessor(workersCount uint) *ZgrabProcessor {
 	proc := &ZgrabProcessor{}
 
 	work := func(item interface{}) {
-		address, ok := item.(*net.IP)
+		job, ok := item.(*ZgrabJob)
 		if !ok {
-			log.Panic("unexpected object:", address)
+			log.Panic("unexpected object:", job)
 		}
 
 		// IP addresses (byte arrays) can not be used directly
-		key := string(*address)
+		key := string(job.Address)
 
 		// Do the banner grab
-		result := NewMxHost(*address)
+		result := NewMxHost(job.Address)
+		job.Result = &result
 
 		// Lock
 		proc.mutex.Lock()
 
 		// Add to cache
-		proc.cache.Add(key, &result)
+		proc.cache.Add(key, job)
 
 		// Remove from active jobs map
 		delete(proc.jobs, key)
@@ -62,10 +71,14 @@ func NewZgrabProcessor(workersCount uint) *ZgrabProcessor {
 		// Unlock
 		proc.mutex.Unlock()
 
-		resultProcessor.Add(&result)
+		// Wake up waiting routines
+		job.wait.Done()
+
+		// Enqueue the result saving to the database
+		resultProcessor.Add(job.Result)
 	}
 	proc.workers = NewWorkerPool(workersCount, work)
-	proc.jobs = make(map[string]bool)
+	proc.jobs = make(map[string]*ZgrabJob)
 
 	// Initialize cache
 	if proc.cache, err = lru.New(zgrabCacheSize); err != nil {
@@ -76,24 +89,24 @@ func NewZgrabProcessor(workersCount uint) *ZgrabProcessor {
 }
 
 // Creates a new job
-func (proc *ZgrabProcessor) NewJob(address net.IP) {
-	exist := false
+func (proc *ZgrabProcessor) NewJob(address net.IP) (job *ZgrabJob) {
 	key := string(address)
+	exist := false
 
 	proc.mutex.Lock()
 
 	// Does the address exist in the cache?
 	if obj, ok := proc.cache.Get(key); ok {
-		host, _ := obj.(*MxHost)
+		job, _ = obj.(*ZgrabJob)
 
-		if time.Since(*host.UpdatedAt) > zgrabTTL {
+		if time.Since(*job.Result.UpdatedAt) <= zgrabTTL {
+			// nothing to do
+			proc.cacheHits += 1
+			exist = true
+		} else {
 			// Cache is outdated
 			proc.cache.Remove(key)
 			proc.cacheExpiries += 1
-		} else {
-			// nothing to do
-			exist = true
-			proc.cacheHits += 1
 		}
 	} else {
 		proc.cacheMisses += 1
@@ -101,22 +114,31 @@ func (proc *ZgrabProcessor) NewJob(address net.IP) {
 
 	if !exist {
 		// Is there already an active job with the same address?
-		if _, exist = proc.jobs[key]; exist {
+		if job, exist = proc.jobs[key]; exist {
 			proc.concurrentHits += 1
 		} else {
 			// Add to active jobs map
-			proc.jobs[key] = true
+			job = &ZgrabJob{Address: address}
+			proc.jobs[key] = job
 		}
 	}
 
 	proc.mutex.Unlock()
 
 	if !exist {
-		proc.workers.Add(&address)
+		job.wait.Add(1)
+		proc.workers.Add(job)
 	}
+
+	return job
 }
 
 // Stops accepting new jobs and waits until all jobs are finished
 func (proc *ZgrabProcessor) Close() {
 	proc.workers.Close()
+}
+
+// Stops accepting new jobs and waits until all jobs are finished
+func (job *ZgrabJob) Wait() {
+	job.wait.Wait()
 }
