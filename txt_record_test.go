@@ -37,3 +37,19 @@ func TestTxtStarttls(t *testing.T) {
 	// second: starttls == false
 	check(false, []MxHost{MxHost{starttls: &True}, MxHost{starttls: &False}})
 }
+
+func TestTxtWithCertificate(t *testing.T) {
+	fingerprintA := []byte("deadbeef")
+	fingerprintB := []byte("foobar")
+	hostA := MxHost{starttls: &True, serverFingerprint: &fingerprintA}
+	hostB := MxHost{starttls: &True, serverFingerprint: &fingerprintA}
+	hostC := MxHost{starttls: &True, serverFingerprint: &fingerprintB}
+
+	txtRecord := createTxtRecord("", []MxHost{hostA, hostB, hostC})
+	str := txtRecord.String()
+
+	// no duplicate fingerprints should appear
+	if str != "starttls=true fingerprints=deadbeef,foobar" {
+		t.Fatal("invalid string:", str)
+	}
+}

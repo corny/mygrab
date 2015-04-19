@@ -6,7 +6,8 @@ import (
 
 type TxtRecord struct {
 	starttls     bool
-	fingerprints []string
+	fingerprints *stringSet
+	tlsVersions  *stringSet
 }
 
 // Creates a TxtRecord from one or more MxHost objects
@@ -27,13 +28,19 @@ func createTxtRecord(hostname string, hosts []MxHost) (record TxtRecord) {
 		}
 	}
 	if !record.starttls {
-		// no sense do go further
+		// no sense to go further
 		return
 	}
 
+	record.tlsVersions = &stringSet{}
+	record.fingerprints = &stringSet{}
+
 	for _, host := range hosts {
+		if host.tlsVersion != nil {
+			record.fingerprints.Add(string(*host.tlsVersion))
+		}
 		if host.serverFingerprint != nil {
-			record.fingerprints = append(record.fingerprints, string(*host.serverFingerprint))
+			record.fingerprints.Add(string(*host.serverFingerprint))
 		}
 	}
 
@@ -49,15 +56,14 @@ func (record *TxtRecord) String() string {
 	buffer := new(bytes.Buffer)
 	buffer.WriteString("starttls=true")
 
-	if len(record.fingerprints) > 0 {
-		buffer.WriteString(" fingerprints=")
-		for i, fingerprint := range record.fingerprints {
-			if i > 0 {
-				buffer.WriteByte(',')
-			}
-			buffer.WriteString(fingerprint)
+	if record.tlsVersions.Len() == 1 {
+		buffer.WriteString(" tls-version=")
+		buffer.WriteString(record.tlsVersions.String())
+	}
 
-		}
+	if len(*record.fingerprints) > 0 {
+		buffer.WriteString(" fingerprints=")
+		buffer.WriteString(record.fingerprints.String())
 	}
 
 	return buffer.String()

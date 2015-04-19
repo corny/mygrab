@@ -28,8 +28,14 @@ func NewMxProcessor(workersCount uint) *MxProcessor {
 		addresses := UniqueStrings(mxAddresses.Results())
 
 		// Do the bannergrabs
-		for _, addr := range addresses {
-			zgrabProcessor.NewJob(net.ParseIP(addr))
+		jobs := make([]*ZgrabJob, len(addresses))
+
+		for i, addr := range addresses {
+			jobs[i] = zgrabProcessor.NewJob(net.ParseIP(addr))
+		}
+
+		for _, job := range jobs {
+			job.Wait()
 		}
 
 	}

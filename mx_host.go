@@ -88,7 +88,7 @@ func NewMxHost(address net.IP) MxHost {
 		}
 
 		if entry.Error != nil {
-			// If an error occurs it we expect the entry to be the last
+			// If an error occurs we expect the log entry to be the last
 			err := simplifyError(entry.Error).Error()
 			result.Error = &err
 		}
