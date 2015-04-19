@@ -10,7 +10,7 @@ var (
 )
 
 func TestTxtStarttls(t *testing.T) {
-	check := func(expected bool, hosts []MxHost) {
+	check := func(expected bool, hosts []*MxHost) {
 		txt := createTxtRecord("", hosts)
 		if txt.starttls != expected {
 			t.Fatal("invalid starttls value:", txt.starttls, "for", hosts)
@@ -18,38 +18,38 @@ func TestTxtStarttls(t *testing.T) {
 	}
 
 	// no hosts
-	check(false, []MxHost{})
+	check(false, []*MxHost{})
 
 	// starttls == nil
-	check(false, []MxHost{MxHost{}})
+	check(false, []*MxHost{&MxHost{}})
 
 	// starttls == false
-	check(false, []MxHost{MxHost{starttls: &False}})
+	check(false, []*MxHost{&MxHost{starttls: &False}})
 
 	// starttls == true
-	check(true, []MxHost{MxHost{starttls: &True}})
+	check(true, []*MxHost{&MxHost{starttls: &True}})
 
 	// first:  starttls == true
 	// second: unreachable
-	check(true, []MxHost{MxHost{starttls: &True}, MxHost{}})
+	check(true, []*MxHost{&MxHost{starttls: &True}, &MxHost{}})
 
 	// first:  starttls == true
 	// second: starttls == false
-	check(false, []MxHost{MxHost{starttls: &True}, MxHost{starttls: &False}})
+	check(false, []*MxHost{&MxHost{starttls: &True}, &MxHost{starttls: &False}})
 }
 
 func TestTxtWithCertificate(t *testing.T) {
-	fingerprintA := []byte("deadbeef")
-	fingerprintB := []byte("foobar")
-	hostA := MxHost{starttls: &True, serverFingerprint: &fingerprintA}
-	hostB := MxHost{starttls: &True, serverFingerprint: &fingerprintA}
-	hostC := MxHost{starttls: &True, serverFingerprint: &fingerprintB}
+	fingerprintA := []byte("foo")
+	fingerprintB := []byte("bar")
+	hostA := &MxHost{starttls: &True, serverFingerprint: &fingerprintA}
+	hostB := &MxHost{starttls: &True, serverFingerprint: &fingerprintA}
+	hostC := &MxHost{starttls: &True, serverFingerprint: &fingerprintB}
 
-	txtRecord := createTxtRecord("", []MxHost{hostA, hostB, hostC})
+	txtRecord := createTxtRecord("", []*MxHost{hostA, hostB, hostC})
 	str := txtRecord.String()
 
 	// no duplicate fingerprints should appear
-	if str != "starttls=true fingerprints=deadbeef,foobar" {
+	if str != "starttls=true fingerprints=666f6f,626172" {
 		t.Fatal("invalid string:", str)
 	}
 }

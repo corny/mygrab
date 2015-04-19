@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/hex"
 )
 
 type TxtRecord struct {
@@ -11,7 +12,7 @@ type TxtRecord struct {
 }
 
 // Creates a TxtRecord from one or more MxHost objects
-func createTxtRecord(hostname string, hosts []MxHost) (record TxtRecord) {
+func createTxtRecord(hostname string, hosts []*MxHost) (record TxtRecord) {
 
 	// Check if all reachable hosts has StartTLS
 	starttlsFound := false
@@ -37,10 +38,10 @@ func createTxtRecord(hostname string, hosts []MxHost) (record TxtRecord) {
 
 	for _, host := range hosts {
 		if host.tlsVersion != nil {
-			record.fingerprints.Add(string(*host.tlsVersion))
+			record.tlsVersions.Add(string(*host.tlsVersion))
 		}
 		if host.serverFingerprint != nil {
-			record.fingerprints.Add(string(*host.serverFingerprint))
+			record.fingerprints.Add(hex.EncodeToString(*host.serverFingerprint))
 		}
 	}
 

@@ -138,7 +138,6 @@ func (proc *ZgrabProcessor) Close() {
 	proc.workers.Close()
 }
 
-// Stops accepting new jobs and waits until all jobs are finished
 func (job *ZgrabJob) Wait() {
 	job.wait.Wait()
 }
