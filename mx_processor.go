@@ -31,6 +31,7 @@ func NewMxProcessor(workersCount uint) *MxProcessor {
 		for _, addr := range addresses {
 			zgrabProcessor.NewJob(net.ParseIP(addr))
 		}
+
 	}
 
 	return &MxProcessor{workers: NewWorkerPool(workersCount, work)}
