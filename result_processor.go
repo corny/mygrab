@@ -21,6 +21,8 @@ func NewResultProcessor(workersCount uint) *ResultProcessor {
 			saveDomain(res)
 		case *MxHost:
 			saveMxHost(res)
+		case *TxtRecord:
+			saveMxDomain(res)
 		default:
 			log.Fatal("unknown db result:", reflect.TypeOf(res))
 		}

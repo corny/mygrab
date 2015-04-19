@@ -49,7 +49,7 @@ func TestTxtWithCertificate(t *testing.T) {
 	str := txtRecord.String()
 
 	// no duplicate fingerprints should appear
-	if str != "starttls=true fingerprints=666f6f,626172" {
+	if str != "starttls=true fingerprint=666f6f,626172" {
 		t.Fatal("invalid string:", str)
 	}
 }

@@ -98,6 +98,12 @@ func main() {
 		for scanner.Scan() {
 			domainProcessor.Add(scanner.Text())
 		}
+	case "import-mx":
+		// Read stdin
+		scanner := bufio.NewScanner(os.Stdin)
+		for scanner.Scan() {
+			mxProcessor.NewJob(scanner.Text())
+		}
 	case "resolve-mx":
 		resolveDomainMxHosts()
 	default:

@@ -52,6 +52,18 @@ func (result *MxHost) TLSHello() *ztls.ServerHello {
 	return result.TLSHandshake.ServerHello
 }
 
+// Checks if the certificate is not yet valid or expired
+func (result *MxHost) certificateExpired() bool {
+	c := result.ServerCertificate()
+	now := time.Now()
+	return now.Before(c.NotBefore) || now.After(c.NotAfter)
+}
+
+// Checks if the certificate is valid for a given domain name
+func (result *MxHost) certificateValidForDomain(domain string) bool {
+	return result.ServerCertificate().VerifyHostname(domain) == nil
+}
+
 var stripErrors = []string{"Conversation error", "Could not connect", "dial tcp", "read tcp"}
 
 func simplifyError(err error) error {
@@ -94,7 +106,7 @@ func NewMxHost(address net.IP) MxHost {
 		}
 	}
 
-	// Set TLS Parameters
+	// Copy TLS Parameters
 	hello := result.TLSHello()
 	if hello != nil {
 		cipherSuite := hello.CipherSuite.String()
@@ -103,7 +115,7 @@ func NewMxHost(address net.IP) MxHost {
 		result.tlsCipherSuite = &cipherSuite
 	}
 
-	// Set SHA1 Fingerprints
+	// Copy SHA1 Fingerprints
 	certs := result.Certificates()
 	if certs != nil {
 		result.caFingerprints = make([][]byte, len(certs)-1)

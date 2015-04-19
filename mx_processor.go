@@ -21,22 +21,28 @@ func NewMxProcessor(workersCount uint) *MxProcessor {
 		mxAddresses := dnsProcessor.NewJobs(hostname, addressTypes)
 		mxAddresses.Wait()
 
-		// Save results
+		// Save DNS results
 		resultProcessor.Add(mxAddresses)
 
 		// Make addresses unique
 		addresses := UniqueStrings(mxAddresses.Results())
 
-		// Do the bannergrabs
 		jobs := make([]*ZgrabJob, len(addresses))
+		hosts := make([]*MxHost, len(addresses))
 
 		for i, addr := range addresses {
+			// Do the bannergrabs
 			jobs[i] = zgrabProcessor.NewJob(net.ParseIP(addr))
 		}
 
-		for _, job := range jobs {
+		for i, job := range jobs {
 			job.Wait()
+			hosts[i] = job.Result
 		}
+
+		txt := createTxtRecord(hostname, hosts)
+
+		resultProcessor.Add(&txt)
 
 	}
 

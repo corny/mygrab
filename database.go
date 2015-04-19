@@ -186,3 +186,27 @@ func saveMxHost(result *MxHost) {
 		log.Fatal(err)
 	}
 }
+
+// Saves a MxHost in the database
+func saveMxDomain(record *TxtRecord) {
+	txt := record.String()
+
+	var id int
+	err := dbconn.QueryRow("SELECT id FROM mx_domains WHERE name = $1", record.domain).Scan(&id)
+
+	switch err {
+	case sql.ErrNoRows:
+		// not yet present
+		_, err := dbconn.Exec("INSERT INTO mx_domains (name,txt) VALUES ($1,$2)", record.domain, txt)
+		if err != nil {
+			log.Panicln(err)
+		}
+	case nil:
+		_, err := dbconn.Exec("UPDATE mx_domains SET txt=$1 WHERE id = $2", txt, id)
+		if err != nil {
+			log.Panicln(err)
+		}
+	default:
+		log.Fatal(err)
+	}
+}

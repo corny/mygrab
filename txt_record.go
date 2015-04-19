@@ -3,20 +3,31 @@ package main
 import (
 	"bytes"
 	"encoding/hex"
+	"strconv"
 )
 
 type TxtRecord struct {
+	domain       string
 	starttls     bool
-	fingerprints *stringSet
-	tlsVersions  *stringSet
+	fingerprints stringSet
+	tlsVersions  stringSet
+	certErrors   stringSet
+	updatedAt    int64
 }
 
 // Creates a TxtRecord from one or more MxHost objects
 func createTxtRecord(hostname string, hosts []*MxHost) (record TxtRecord) {
+	record.domain = hostname
 
 	// Check if all reachable hosts has StartTLS
 	starttlsFound := false
-	for _, host := range hosts {
+	for i, host := range hosts {
+		// Update Timestamp
+		updatedAt := host.UpdatedAt.Unix()
+		if i == 0 || updatedAt > record.updatedAt {
+			record.updatedAt = updatedAt
+		}
+
 		if host.starttls != nil {
 			if !starttlsFound {
 				// set initial value
@@ -33,15 +44,25 @@ func createTxtRecord(hostname string, hosts []*MxHost) (record TxtRecord) {
 		return
 	}
 
-	record.tlsVersions = &stringSet{}
-	record.fingerprints = &stringSet{}
+	record.tlsVersions = stringSet{}
+	record.fingerprints = stringSet{}
+	record.certErrors = stringSet{}
 
 	for _, host := range hosts {
 		if host.tlsVersion != nil {
 			record.tlsVersions.Add(string(*host.tlsVersion))
-		}
-		if host.serverFingerprint != nil {
-			record.fingerprints.Add(hex.EncodeToString(*host.serverFingerprint))
+
+			// Has the server certificate been successfully parsed?
+			if host.serverFingerprint != nil {
+				record.fingerprints.Add(hex.EncodeToString(*host.serverFingerprint))
+
+				if !host.certificateValidForDomain(hostname) {
+					record.certErrors.Add("mismatch")
+				}
+				if host.certificateExpired() {
+					record.certErrors.Add("expired")
+				}
+			}
 		}
 	}
 
@@ -50,21 +71,34 @@ func createTxtRecord(hostname string, hosts []*MxHost) (record TxtRecord) {
 
 // String representation
 func (record *TxtRecord) String() string {
-	if !record.starttls {
-		return "starttls=false"
+	buffer := new(bytes.Buffer)
+	if record.starttls {
+		buffer.WriteString("starttls=true")
+	} else {
+		buffer.WriteString("starttls=false")
 	}
 
-	buffer := new(bytes.Buffer)
-	buffer.WriteString("starttls=true")
+	if !record.starttls {
+		return buffer.String()
+	}
 
+	buffer.WriteString(" updated=")
+	buffer.WriteString(strconv.FormatInt(record.updatedAt, 10))
+
+	// Only one TLS version?
 	if record.tlsVersions.Len() == 1 {
 		buffer.WriteString(" tls-version=")
 		buffer.WriteString(record.tlsVersions.String())
 	}
 
-	if len(*record.fingerprints) > 0 {
-		buffer.WriteString(" fingerprints=")
+	if record.fingerprints.Len() > 0 {
+		buffer.WriteString(" fingerprint=")
 		buffer.WriteString(record.fingerprints.String())
+
+		if record.certErrors.Len() > 0 {
+			buffer.WriteString(" certificate-errors=")
+			buffer.WriteString(record.certErrors.String())
+		}
 	}
 
 	return buffer.String()
