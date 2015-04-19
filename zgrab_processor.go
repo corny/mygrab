@@ -31,10 +31,10 @@ type ZgrabProcessor struct {
 	// LRU cache to reduce database load
 	cache *lru.Cache
 
-	cacheHits      uint
-	cacheMisses    uint
-	cacheExpiries  uint
-	concurrentHits uint
+	cacheHits      uint64
+	cacheMisses    uint64
+	cacheExpiries  uint64
+	concurrentHits uint64
 
 	// mutex for the map
 	mutex sync.Mutex
