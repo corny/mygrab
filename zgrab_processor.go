@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/hashicorp/golang-lru"
 	"log"
+	"net"
 	"sync"
 	"time"
 )
@@ -38,21 +39,25 @@ func NewZgrabProcessor(workersCount uint) *ZgrabProcessor {
 	proc := &ZgrabProcessor{}
 
 	work := func(item interface{}) {
-		address, ok := item.(*string)
+		address, ok := item.(*net.IP)
 		if !ok {
 			log.Panic("unexpected object:", address)
 		}
 
+		// IP addresses (byte arrays) can not be used directly
+		key := string(*address)
+
+		// Do the banner grab
 		result := NewMxHost(*address)
 
 		// Lock
 		proc.mutex.Lock()
 
 		// Add to cache
-		proc.cache.Add(*address, &result)
+		proc.cache.Add(key, &result)
 
 		// Remove from active jobs map
-		delete(proc.jobs, *address)
+		delete(proc.jobs, key)
 
 		// Unlock
 		proc.mutex.Unlock()
@@ -71,18 +76,19 @@ func NewZgrabProcessor(workersCount uint) *ZgrabProcessor {
 }
 
 // Creates a new job
-func (proc *ZgrabProcessor) NewJob(address string) {
+func (proc *ZgrabProcessor) NewJob(address net.IP) {
 	exist := false
+	key := string(address)
 
 	proc.mutex.Lock()
 
 	// Does the address exist in the cache?
-	if obj, ok := proc.cache.Get(address); ok {
+	if obj, ok := proc.cache.Get(key); ok {
 		host, _ := obj.(*MxHost)
 
 		if time.Since(*host.UpdatedAt) > zgrabTTL {
 			// Cache is outdated
-			proc.cache.Remove(address)
+			proc.cache.Remove(key)
 			proc.cacheExpiries += 1
 		} else {
 			// nothing to do
@@ -95,11 +101,11 @@ func (proc *ZgrabProcessor) NewJob(address string) {
 
 	if !exist {
 		// Is there already an active job with the same address?
-		if _, exist = proc.jobs[address]; exist {
+		if _, exist = proc.jobs[key]; exist {
 			proc.concurrentHits += 1
 		} else {
 			// Add to active jobs map
-			proc.jobs[address] = true
+			proc.jobs[key] = true
 		}
 	}
 

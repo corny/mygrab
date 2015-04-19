@@ -12,7 +12,7 @@ import (
 
 // Encapsulates the zlib.Grab struct
 type MxHost struct {
-	address           string
+	address           net.IP
 	grab              *zlib.Grab
 	TLSHandshake      *ztls.ServerHandshake
 	starttls          *bool
@@ -67,9 +67,9 @@ func simplifyError(err error) error {
 }
 
 // Creates a ZgrabResult
-func NewMxHost(address string) MxHost {
+func NewMxHost(address net.IP) MxHost {
 	result := MxHost{address: address}
-	result.grab = zlib.GrabBanner(zlibConfig, &zlib.GrabTarget{Addr: net.ParseIP(address)})
+	result.grab = zlib.GrabBanner(zlibConfig, &zlib.GrabTarget{Addr: address})
 	now := time.Now()
 	result.UpdatedAt = &now
 

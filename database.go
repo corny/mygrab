@@ -163,7 +163,7 @@ func saveCertificate(cert *x509.Certificate) {
 
 // Saves a MxHost in the database
 func saveMxHost(result *MxHost) {
-	address := result.address
+	address := result.address.String()
 
 	var id int
 	err := dbconn.QueryRow("SELECT id FROM mx_hosts WHERE address = $1", address).Scan(&id)

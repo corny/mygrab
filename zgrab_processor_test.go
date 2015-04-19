@@ -2,13 +2,14 @@ package main
 
 import (
 	"github.com/hashicorp/golang-lru"
+	"net"
 	"testing"
 )
 
 func TestZgrabConcurrency(t *testing.T) {
 	processor := NewZgrabProcessor(0)
-	targetA := "127.0.0.1"
-	targetB := "127.0.0.1"
+	targetA := net.ParseIP("127.0.0.1")
+	targetB := net.ParseIP("127.0.0.1")
 
 	processor.NewJob(targetA)
 	processor.NewJob(targetB)
@@ -26,8 +27,8 @@ func TestZgrabConcurrency(t *testing.T) {
 func TestZgrabCache(t *testing.T) {
 	resultProcessor = NewResultProcessor(0)
 	processor := NewZgrabProcessor(1)
-	targetA := "127.0.0.1"
-	targetB := "127.0.0.1"
+	targetA := net.ParseIP("127.0.0.1")
+	targetB := net.ParseIP("127.0.0.1")
 
 	processor.NewJob(targetA)
 	processor.Close()
@@ -48,8 +49,8 @@ func TestZgrabCache(t *testing.T) {
 
 func TestLruCache(t *testing.T) {
 	cache, _ := lru.New(10)
-	targetA := "127.0.0.1"
-	targetB := "127.0.0.1"
+	targetA := string(net.ParseIP("127.0.0.1"))
+	targetB := string(net.ParseIP("127.0.0.1"))
 
 	cache.Add(targetA, "foo")
 	val, _ := cache.Get(targetB)

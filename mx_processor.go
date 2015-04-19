@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/miekg/dns"
+	"net"
 )
 
 var (
@@ -28,7 +29,7 @@ func NewMxProcessor(workersCount uint) *MxProcessor {
 
 		// Do the bannergrabs
 		for _, addr := range addresses {
-			zgrabProcessor.NewJob(addr)
+			zgrabProcessor.NewJob(net.ParseIP(addr))
 		}
 	}
 
