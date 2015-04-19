@@ -62,20 +62,20 @@ func saveDomain(job *DnsJob) {
 
 	var id int
 	err := dbconn.QueryRow("SELECT 1 FROM domains WHERE name = $1", domain).Scan(&id)
-	switch {
-	case err == sql.ErrNoRows:
+	switch err {
+	case sql.ErrNoRows:
 		// not yet present
 		_, err = dbconn.Exec("INSERT INTO domains (mx_hosts, dns_secure, dns_error, dns_bogus, name) VALUES ($1,$2,$3,$4,$5)", params...)
 		if err != nil {
 			log.Panicln(err)
 		}
-	case err != nil:
-		log.Fatal(err)
-	default:
+	case nil:
 		_, err = dbconn.Exec("UPDATE domains SET mx_hosts=$1, dns_secure=$2, dns_error=$3, dns_bogus=$4 WHERE name=$5", params...)
 		if err != nil {
 			log.Panicln(err)
 		}
+	default:
+		log.Fatal(err)
 	}
 }
 
@@ -130,8 +130,8 @@ func saveCertificate(cert *x509.Certificate) {
 
 	var id int
 	err := dbconn.QueryRow("SELECT 1 FROM raw_certificates WHERE id = $1", sha1sum).Scan(&id)
-	switch {
-	case err == sql.ErrNoRows:
+	switch err {
+	case sql.ErrNoRows:
 		// not yet present
 		_, err = dbconn.Exec("INSERT INTO raw_certificates (id, raw) VALUES ($1,$2)", sha1sum, cert.Raw)
 		if err != nil {
@@ -152,11 +152,11 @@ func saveCertificate(cert *x509.Certificate) {
 		if err != nil {
 			log.Panicln(err)
 		}
-	case err != nil:
-		log.Fatal(err)
-	default:
+	case nil:
 		// already present
 		knownCerts.Add(sha1sum, 1)
+	default:
+		log.Fatal(err)
 	}
 
 }
@@ -170,19 +170,19 @@ func saveMxHost(result *MxHost) {
 
 	params := []interface{}{result.Error, result.starttls, result.tlsVersion, result.tlsCipherSuite, result.serverFingerprint, ByteaArray(result.caFingerprints), result.UpdatedAt, address}
 
-	switch {
-	case err == sql.ErrNoRows:
+	switch err {
+	case sql.ErrNoRows:
 		// not yet present
 		_, err := dbconn.Exec("INSERT INTO mx_hosts (error, starttls, tls_version, tls_cipher_suite, certificate_id, ca_certificate_ids, updated_at, address) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)", params...)
 		if err != nil {
 			log.Panicln(err)
 		}
-	case err != nil:
-		log.Fatal(err)
-	default:
+	case nil:
 		_, err := dbconn.Exec("UPDATE mx_hosts SET error=$1, starttls=$2, tls_version=$3, tls_cipher_suite=$4, certificate_id=$5, ca_certificate_ids=$6, updated_at=$7 WHERE address = $8", params...)
 		if err != nil {
 			log.Panicln(err)
 		}
+	default:
+		log.Fatal(err)
 	}
 }
