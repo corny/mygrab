@@ -76,6 +76,9 @@ func NewZgrabProcessor(workersCount uint) *ZgrabProcessor {
 
 		// Enqueue the result saving to the database
 		resultProcessor.Add(job.Result)
+		if certs := job.Result.Certificates(); certs != nil {
+			resultProcessor.Add(certs)
+		}
 	}
 	proc.workers = NewWorkerPool(workersCount, work)
 	proc.jobs = make(map[string]*ZgrabJob)

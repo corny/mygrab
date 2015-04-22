@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/zmap/zgrab/ztools/x509"
 	"log"
 	"reflect"
 )
@@ -23,6 +24,10 @@ func NewResultProcessor(workersCount uint) *ResultProcessor {
 			saveMxHost(res)
 		case *TxtRecord:
 			saveMxDomain(res)
+		case []*x509.Certificate:
+			for _, cert := range res {
+				saveCertificate(cert)
+			}
 		default:
 			log.Fatal("unknown db result:", reflect.TypeOf(res))
 		}

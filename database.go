@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"encoding/hex"
 	"github.com/hashicorp/golang-lru"
 	_ "github.com/lib/pq"
 	"github.com/zmap/zgrab/ztools/x509"
@@ -122,25 +123,33 @@ func saveMxAddresses(job *DnsJob) {
 // Saves a certificate if it is not saved yet
 func saveCertificate(cert *x509.Certificate) {
 	sha1sum := string(cert.FingerprintSHA1)
+	sha1hex := hex.EncodeToString(cert.FingerprintSHA1)
 
 	// Certificate cached?
 	if _, ok := knownCerts.Get(sha1sum); ok {
 		return
 	}
 
-	var id int
-	err := dbconn.QueryRow("SELECT 1 FROM raw_certificates WHERE id = $1", sha1sum).Scan(&id)
+	var exists bool
+	err := dbconn.QueryRow("SELECT TRUE FROM raw_certificates WHERE id = $1", sha1sum).Scan(&exists)
 	switch err {
 	case sql.ErrNoRows:
 		// not yet present
-		_, err = dbconn.Exec("INSERT INTO raw_certificates (id, raw) VALUES ($1,$2)", sha1sum, cert.Raw)
-		if err != nil {
-			log.Panicln(err)
+		if _, err = dbconn.Exec("INSERT INTO raw_certificates (id, raw) VALUES ($1,$2)", sha1sum, cert.Raw); err != nil {
+			if strings.Contains(err.Error(), "duplicate key") {
+				// Just a race condition
+				log.Println("duplicate key", sha1hex)
+				return
+			} else {
+				log.Panic(err, sha1hex)
+			}
 		}
 
 		subject := string(x509.SHA1Fingerprint(cert.RawSubject))
 		issuer := string(x509.SHA1Fingerprint(cert.RawIssuer))
 		pubkey := string(x509.SHA1Fingerprint(cert.RawSubjectPublicKeyInfo))
+		signatureAlgorithm := cert.SignatureAlgorithmName()
+		publicKeyAlgorithm := cert.PublicKeyAlgorithmName()
 
 		var validationError *string
 		if cert.ValidationError() != nil {
@@ -148,10 +157,12 @@ func saveCertificate(cert *x509.Certificate) {
 			validationError = &err
 		}
 
-		_, err = dbconn.Exec("INSERT INTO certificates (id, subject_id, issuer_id, key_id, is_valid, validation_error, is_self_signed, is_ca, first_seen_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8, NOW())", sha1sum, subject, issuer, pubkey, cert.IsValid(), validationError, subject == issuer, cert.IsCA)
+		_, err = dbconn.Exec("INSERT INTO certificates (id, subject_id, issuer_id, key_id, signature_algorithm, key_algorithm, is_valid, validation_error, is_self_signed, is_ca, first_seen_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, NOW())",
+			sha1sum, subject, issuer, pubkey, signatureAlgorithm, publicKeyAlgorithm, cert.IsValid(), validationError, subject == issuer, cert.IsCA)
 		if err != nil {
-			log.Panicln(err)
+			log.Panicln(err, sha1hex)
 		}
+		knownCerts.Add(sha1sum, 1)
 	case nil:
 		// already present
 		knownCerts.Add(sha1sum, 1)
@@ -168,17 +179,17 @@ func saveMxHost(result *MxHost) {
 	var id int
 	err := dbconn.QueryRow("SELECT id FROM mx_hosts WHERE address = $1", address).Scan(&id)
 
-	params := []interface{}{result.Error, result.starttls, result.tlsVersion, result.tlsCipherSuite, result.serverFingerprint, ByteaArray(result.caFingerprints), result.UpdatedAt, address}
+	params := []interface{}{result.Error, result.starttls, result.tlsVersion, result.tlsCipherSuite, result.serverFingerprint, ByteaArray(result.caFingerprints), result.certificateExpired(), result.UpdatedAt, address}
 
 	switch err {
 	case sql.ErrNoRows:
 		// not yet present
-		_, err := dbconn.Exec("INSERT INTO mx_hosts (error, starttls, tls_version, tls_cipher_suite, certificate_id, ca_certificate_ids, updated_at, address) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)", params...)
+		_, err := dbconn.Exec("INSERT INTO mx_hosts (error, starttls, tls_version, tls_cipher_suite, certificate_id, ca_certificate_ids, cert_expired, updated_at, address) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)", params...)
 		if err != nil {
 			log.Panicln(err)
 		}
 	case nil:
-		_, err := dbconn.Exec("UPDATE mx_hosts SET error=$1, starttls=$2, tls_version=$3, tls_cipher_suite=$4, certificate_id=$5, ca_certificate_ids=$6, updated_at=$7 WHERE address = $8", params...)
+		_, err := dbconn.Exec("UPDATE mx_hosts SET error=$1, starttls=$2, tls_version=$3, tls_cipher_suite=$4, certificate_id=$5, ca_certificate_ids=$6, cert_expired=$7, updated_at=$8 WHERE address = $9", params...)
 		if err != nil {
 			log.Panicln(err)
 		}
