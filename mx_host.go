@@ -21,7 +21,6 @@ type MxHost struct {
 	tlsVersion        *string
 	tlsCipherSuite    *string
 	connect           *zlib.ConnectEvent
-	MailBanner        string
 	Error             *string
 	UpdatedAt         *time.Time
 }
@@ -95,8 +94,6 @@ func NewMxHost(address net.IP) MxHost {
 		case *zlib.StartTLSEvent:
 			val := entry.Error == nil
 			result.starttls = &val
-		case *zlib.MailBannerEvent:
-			result.MailBanner = data.Banner
 		}
 
 		if entry.Error != nil {
