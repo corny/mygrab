@@ -59,7 +59,7 @@ func createTxtRecord(hostname string, hosts []*MxHost) (record TxtRecord) {
 				if !host.certificateValidForDomain(hostname) {
 					record.certErrors.Add("mismatch")
 				}
-				if host.certificateExpired() {
+				if *host.certificateExpired() {
 					record.certErrors.Add("expired")
 				}
 			}

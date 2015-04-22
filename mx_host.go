@@ -52,10 +52,14 @@ func (result *MxHost) TLSHello() *ztls.ServerHello {
 }
 
 // Checks if the certificate is not yet valid or expired
-func (result *MxHost) certificateExpired() bool {
+func (result *MxHost) certificateExpired() *bool {
 	c := result.ServerCertificate()
+	if c == nil {
+		return nil
+	}
 	now := time.Now()
-	return now.Before(c.NotBefore) || now.After(c.NotAfter)
+	val := now.Before(c.NotBefore) || now.After(c.NotAfter)
+	return &val
 }
 
 // Checks if the certificate is valid for a given domain name
