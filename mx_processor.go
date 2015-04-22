@@ -42,6 +42,7 @@ func NewMxProcessor(workersCount uint) *MxProcessor {
 
 		txt := createTxtRecord(hostname, hosts)
 
+		nsUpdater.Add(hostname, txt.String())
 		resultProcessor.Add(&txt)
 
 	}
