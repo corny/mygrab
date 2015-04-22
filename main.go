@@ -47,6 +47,7 @@ func init() {
 }
 
 func main() {
+	var singleWorker bool
 
 	flag.StringVar(&zlibConfig.EHLODomain, "ehlo", zlibConfig.EHLODomain, "Send an EHLO with the specified domain (implies --smtp)")
 	flag.StringVar(&dnsResolver, "dnsResolver", dnsResolver, "DNS resolver address")
@@ -58,6 +59,7 @@ func main() {
 	flag.UintVar(&domainWorkers, "domainWorkers", domainWorkers, "Number of dns workers")
 	flag.UintVar(&resultWorkers, "resultWorkers", resultWorkers, "Number of result workers that store results in the database")
 	flag.UintVar(&unboundDebug, "unboundDebug", unboundDebug, "Debug level for libunbound")
+	flag.BoolVar(&singleWorker, "singleWorker", false, "Limit the number of worker per group to one")
 	flag.StringVar(&dbname, "dbName", dbname, "Database name")
 	flag.Parse()
 	args := flag.Args()
@@ -69,6 +71,14 @@ func main() {
 		fmt.Fprintln(os.Stderr, "  import-domains: Read domains from stdin for MX lookups")
 		fmt.Fprintln(os.Stderr, "  resolve-mx: Read mx records from the domains table and resolve them to A/AAAA records")
 		os.Exit(1)
+	}
+
+	if singleWorker {
+		dnsWorkers = 1
+		zgrabWorkers = 1
+		domainWorkers = 1
+		resultWorkers = 1
+		mxWorkers = 1
 	}
 
 	dnsProcessor = NewDnsProcessor(dnsWorkers)
