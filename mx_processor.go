@@ -42,7 +42,12 @@ func NewMxProcessor(workersCount uint) *MxProcessor {
 
 		txt := createTxtRecord(hostname, hosts)
 
-		nsUpdater.Add(hostname, txt.String())
+		// Update Nameserver
+		if nsUpdater != nil {
+			nsUpdater.Add(hostname, txt.String())
+		}
+
+		// Save to database
 		resultProcessor.Add(&txt)
 
 	}

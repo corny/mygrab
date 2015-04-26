@@ -88,7 +88,10 @@ func main() {
 	domainProcessor = NewDomainProcessor(domainWorkers)
 	resultProcessor = NewResultProcessor(resultWorkers)
 	mxProcessor = NewMxProcessor(mxWorkers)
-	nsUpdater = NewNsUpdater()
+
+	if nsupdateKey != "" {
+		nsUpdater = NewNsUpdater()
+	}
 
 	// Configure DNS
 	dnsProcessor.Configure(dnsResolver, dnsTimeout)
@@ -132,5 +135,8 @@ func stopProcessors() {
 	dnsProcessor.Close()
 	zgrabProcessor.Close()
 	resultProcessor.Close()
-	nsUpdater.Close()
+
+	if nsUpdater != nil {
+		nsUpdater.Close()
+	}
 }
