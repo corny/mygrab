@@ -74,33 +74,39 @@ func createTxtRecord(hostname string, hosts []*MxHost) (record TxtRecord) {
 // String representation
 func (record *TxtRecord) String() string {
 	buffer := new(bytes.Buffer)
+
+	addValue := func(key string, value string) {
+		if buffer.Len() > 0 {
+			buffer.WriteString(" ")
+		}
+		buffer.WriteString(key)
+		buffer.WriteString("=")
+		buffer.WriteString(value)
+	}
+
 	if record.starttls {
-		buffer.WriteString("starttls=true")
+		addValue("starttls", "true")
 	} else {
-		buffer.WriteString("starttls=false")
+		addValue("starttls", "false")
 	}
 
 	if !record.starttls {
 		return buffer.String()
 	}
 
-	buffer.WriteString(" updated=")
-	buffer.WriteString(strconv.FormatInt(record.updatedAt, 10))
+	addValue("updated", strconv.FormatInt(record.updatedAt, 10))
 
 	// Only one TLS version?
 	if record.tlsVersions.Len() == 1 {
-		buffer.WriteString(" tls-version=")
-		buffer.WriteString(record.tlsVersions.String())
+		addValue("tls-version", record.tlsVersions.String())
 	}
 
-	if record.fingerprints.Len() > 0 {
-		buffer.WriteString(" fingerprint=")
-		buffer.WriteString(record.fingerprints.String())
+	if record.certErrors.Len() > 0 {
+		addValue("certificate-errors", record.certErrors.String())
+	}
 
-		if record.certErrors.Len() > 0 {
-			buffer.WriteString(" certificate-errors=")
-			buffer.WriteString(record.certErrors.String())
-		}
+	if len(record.fingerprints) > 0 {
+		addValue("fingerprint", record.String())
 	}
 
 	return buffer.String()
