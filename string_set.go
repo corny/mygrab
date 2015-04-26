@@ -23,6 +23,16 @@ func (set stringSet) String() string {
 	return buffer.String()
 }
 
+func (set stringSet) Strings() []string {
+	result := make([]string, len(set))
+	i := 0
+	for key, _ := range set {
+		result[i] = key
+		i += 1
+	}
+	return result
+}
+
 func (set stringSet) Len() int {
 	return len(set)
 }
