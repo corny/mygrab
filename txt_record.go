@@ -23,9 +23,11 @@ func createTxtRecord(hostname string, hosts []*MxHost) (record TxtRecord) {
 	starttlsFound := false
 	for i, host := range hosts {
 		// Update Timestamp
-		updatedAt := host.UpdatedAt.Unix()
-		if i == 0 || updatedAt > record.updatedAt {
-			record.updatedAt = updatedAt
+		if host.UpdatedAt != nil {
+			updatedAt := host.UpdatedAt.Unix()
+			if i == 0 || updatedAt > record.updatedAt {
+				record.updatedAt = updatedAt
+			}
 		}
 
 		if host.starttls != nil {
