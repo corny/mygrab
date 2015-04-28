@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -10,14 +11,15 @@ import (
 )
 
 const (
-	nsupdateBatchSize = 500
-	nsupdateDomain    = 50
-	dnsServer         = "127.0.0.1"
-	dnsZone           = "tls-scan.informatik.uni-bremen.de"
+	nsupdateBatchSize     = 500
+	nsupdateMaxItemLength = 255
 )
 
 var (
-	nsupdateKey string
+	dnsZone             = "tls-scan.informatik.uni-bremen.de"
+	nsupdateServer      = "127.0.0.1"
+	nsupdateTTL    uint = 900
+	nsupdateKey    string
 )
 
 type NsUpdateJob struct {
@@ -51,11 +53,6 @@ func (updater *NsUpdater) Close() {
 func (updater *NsUpdater) worker() {
 	var stdin io.WriteCloser
 
-	update := func(job *NsUpdateJob) {
-		domain := job.domain + "." + dnsZone
-		stdin.Write([]byte(fmt.Sprintf("update delete %s TXT\nupdate add %s %d TXT \"%s\"\n", domain, domain, 900, job.txt)))
-	}
-
 	for {
 		cmd := exec.Command("/usr/bin/nsupdate", "-k", nsupdateKey)
 		stdin, _ = cmd.StdinPipe()
@@ -78,17 +75,17 @@ func (updater *NsUpdater) worker() {
 		}
 
 		// Introduce the update
-		stdin.Write([]byte(fmt.Sprintf("server %s\nzone %s\n", dnsServer, dnsZone)))
+		stdin.Write([]byte(fmt.Sprintf("server %s\nzone %s\n", nsupdateServer, dnsZone)))
 
 		// send the first job
-		update(job)
+		stdin.Write(job.Bytes())
 
 		// other jobs (non-blocking read)
 		for i := 0; i < nsupdateBatchSize; i += 1 {
 			log.Println("nsupdate: select more jobs")
 			select {
 			case job = <-updater.channel:
-				update(job)
+				stdin.Write(job.Bytes())
 			default:
 				job = nil
 			}
@@ -108,4 +105,32 @@ func (updater *NsUpdater) worker() {
 			log.Println("nsupdate: finished successfully")
 		}
 	}
+}
+
+// Creates commands to delete and add the TXT record
+func (job *NsUpdateJob) Bytes() []byte {
+	domain := job.domain + "." + dnsZone
+	length := len(job.txt)
+	chunks := length / nsupdateMaxItemLength
+	buffer := bytes.NewBufferString(fmt.Sprintf("update delete %s TXT\nupdate add %s %d TXT", domain, domain, nsupdateTTL))
+
+	// we need at least one chunk
+	if chunks == 0 {
+		chunks = 1
+	}
+
+	// Long data must be splittet into multiple chunks
+	for i := 0; i < chunks; i++ {
+		buffer.WriteString(" \"")
+		if i == chunks-1 {
+			// the last chunk, there is no maximum function for two integers in Go
+			buffer.Write([]byte(job.txt[i*nsupdateMaxItemLength:]))
+		} else {
+			buffer.Write([]byte(job.txt[i*nsupdateMaxItemLength : (nsupdateMaxItemLength * (i + 1))]))
+		}
+		buffer.WriteString("\"")
+	}
+
+	buffer.WriteString("\n")
+	return buffer.Bytes()
 }

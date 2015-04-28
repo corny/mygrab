@@ -53,7 +53,11 @@ func main() {
 	flag.StringVar(&zlibConfig.EHLODomain, "ehlo", zlibConfig.EHLODomain, "Send an EHLO with the specified domain (implies --smtp)")
 	flag.StringVar(&dnsResolver, "dnsResolver", dnsResolver, "DNS resolver address")
 	flag.UintVar(&dnsTimeout, "dnsTimeout", dnsTimeout, "DNS timeout in seconds")
+
 	flag.StringVar(&nsupdateKey, "nsupdateKey", "", "path to nsupdate key")
+	flag.UintVar(&nsupdateTTL, "nsupdateTTL", nsupdateTTL, "TTL for DNS entries")
+	flag.StringVar(&nsupdateServer, "nsupdateServer", nsupdateServer, "nsupdate server")
+
 	flag.StringVar(&socketPath, "socket", "", "Read from a socket instead of stdin")
 	flag.UintVar(&dnsWorkers, "dnsWorkers", dnsWorkers, "Number of dns workers")
 	flag.UintVar(&mxWorkers, "mxWorkers", mxWorkers, "Number of mx workers")

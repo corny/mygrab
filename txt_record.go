@@ -106,7 +106,7 @@ func (record *TxtRecord) String() string {
 	}
 
 	if len(record.fingerprints) > 0 {
-		addValue("fingerprint", record.String())
+		addValue("fingerprint", record.fingerprints.String())
 	}
 
 	return buffer.String()
