@@ -11,6 +11,9 @@ type WorkerPool struct {
 	// channel for pending jobs
 	channel chan interface{}
 
+	// Number of processed jobs
+	processed uint64
+
 	// WaitGroup to wait until all workers are done
 	wg sync.WaitGroup
 
@@ -34,6 +37,7 @@ func NewWorkerPool(workersCount uint, work WorkerFunc) *WorkerPool {
 func (proc *WorkerPool) worker() {
 	for obj := range proc.channel {
 		proc.work(obj)
+		proc.processed += 1
 	}
 	proc.wg.Done()
 }

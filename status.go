@@ -6,13 +6,20 @@ import (
 )
 
 func status() []byte {
+	poolStatus := func(pool *WorkerPool) map[string]interface{} {
+		m := make(map[string]interface{})
+		m["pending"] = len(pool.channel)
+		m["processed"] = pool.processed
+		return m
+	}
+
 	m := make(map[string]interface{})
 
-	m["dns"] = len(dnsProcessor.workers.channel)
-	m["mx"] = len(mxProcessor.workers.channel)
-	m["zgrab"] = len(zgrabProcessor.workers.channel)
-	m["domain"] = len(domainProcessor.workers.channel)
-	m["result"] = len(resultProcessor.workers.channel)
+	m["dns"] = poolStatus(dnsProcessor.workers)
+	m["mx"] = poolStatus(mxProcessor.workers)
+	m["zgrab"] = poolStatus(zgrabProcessor.workers)
+	m["domain"] = poolStatus(domainProcessor.workers)
+	m["result"] = poolStatus(resultProcessor.workers)
 
 	zgrabStatus := make(map[string]interface{})
 	zgrabStatus["size"] = zgrabProcessor.cache.Len()
