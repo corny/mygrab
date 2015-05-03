@@ -67,7 +67,13 @@ func (result *MxHost) certificateValidForDomain(domain string) bool {
 	return result.ServerCertificate().VerifyHostname(domain) == nil
 }
 
-var stripErrors = []string{"Conversation error", "Could not connect", "dial tcp", "read tcp"}
+var stripErrors = []string{
+	"Conversation error",
+	"Could not connect",
+	"dial tcp",
+	"read tcp",
+	"write tcp",
+}
 
 func simplifyError(err error) error {
 	msg := err.Error()
