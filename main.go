@@ -108,29 +108,20 @@ func main() {
 	runtime.GOMAXPROCS(gomaxprocs)
 	log.Println("Using", gomaxprocs, "operating system threads")
 
-	go processSocket()
+	// Start control socket handler
+	go controlSocket()
 
-	action := args[0]
-	switch action {
-	case "import-domains":
-		// Read stdin
-		scanner := bufio.NewScanner(os.Stdin)
-		for scanner.Scan() {
-			domainProcessor.Add(scanner.Text())
-		}
-	case "import-mx":
-		// Read stdin
-		scanner := bufio.NewScanner(os.Stdin)
-		for scanner.Scan() {
-			mxProcessor.NewJob(scanner.Text())
-		}
-	case "resolve-mx":
-		resolveDomainMxHosts()
-	default:
-		fmt.Fprintln(os.Stderr, "Unknown action:", action)
+	// Process Command
+	err := processCommand(args[0], bufio.NewScanner(os.Stdin), bufio.NewWriter(os.Stdout))
+	if err != nil {
+		os.Stdout.WriteString(err.Error())
 	}
 
 	stopProcessors()
+
+	if err != nil {
+		os.Exit(1)
+	}
 }
 
 func stopProcessors() {

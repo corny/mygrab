@@ -74,7 +74,7 @@ func NewZgrabProcessor(workersCount uint) *ZgrabProcessor {
 		// Wake up waiting routines
 		job.wait.Done()
 
-		// Enqueue the result saving to the database
+		// Enqueue the result to store it in the database
 		resultProcessor.Add(job.Result)
 		if certs := job.Result.Certificates(); certs != nil {
 			resultProcessor.Add(certs)

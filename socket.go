@@ -7,7 +7,7 @@ import (
 	"os"
 )
 
-func processSocket() {
+func controlSocket() {
 	os.Remove(socketPath)
 
 	l, err := net.Listen("unix", socketPath)
@@ -21,25 +21,15 @@ func processSocket() {
 			log.Fatal("accept error:", err)
 		}
 
-		go echoServer(fd)
+		go func() {
+			input := bufio.NewScanner(fd)
+			output := bufio.NewWriter(fd)
+			input.Scan()
+			if err = processCommand(input.Text(), input, output); err != nil {
+				output.WriteString(err.Error() + "\n")
+			}
+			output.Flush()
+			fd.Close()
+		}()
 	}
-}
-
-func echoServer(c net.Conn) {
-	scanner := bufio.NewScanner(c)
-
-	for scanner.Scan() {
-		//domainProcessor.Add(scanner.Text())
-		scanner.Text()
-
-		_, err := c.Write(status())
-
-		if err != nil {
-			log.Println("write error:", err)
-		}
-
-		c.Write([]byte("\n"))
-	}
-
-	c.Close()
 }
