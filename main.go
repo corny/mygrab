@@ -8,7 +8,9 @@ import (
 	"github.com/zmap/zgrab/ztools/zlog"
 	"log"
 	"os"
+	"os/signal"
 	"runtime"
+	"syscall"
 	"time"
 )
 
@@ -111,10 +113,20 @@ func main() {
 	// Start control socket handler
 	go controlSocket()
 
-	// Process Command
-	err := processCommand(args[0], bufio.NewScanner(os.Stdin), bufio.NewWriter(os.Stdout))
-	if err != nil {
-		os.Stdout.WriteString(err.Error())
+	command := args[0]
+	var err error
+
+	if command == "daemon" {
+		// Wait for SIGINT or SIGTERM
+		sigs := make(chan os.Signal, 1)
+		signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+		<-sigs
+	} else {
+		// Process Command
+		err = processCommand(args[0], bufio.NewScanner(os.Stdin), bufio.NewWriter(os.Stdout))
+		if err != nil {
+			os.Stdout.WriteString(err.Error())
+		}
 	}
 
 	stopProcessors()
