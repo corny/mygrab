@@ -20,6 +20,7 @@ type MxHostSummary struct {
 	tlsCipherSuites mapset.Set
 	certificates    []*x509.Certificate
 	fingerprints    [][]byte
+	dhPrimeSize     *int    // Size of Diffie Hellman prime number
 	Error           *string // only the first error
 }
 
@@ -29,6 +30,7 @@ type MxHostGrab struct {
 	tlsVersion     ztls.TLSVersion
 	tlsCipherSuite ztls.CipherSuite
 	certificates   []*x509.Certificate
+	dhPrimeSize    *int // Size of Diffie Hellman prime number
 	Error          *string
 }
 
@@ -36,7 +38,7 @@ type MxHostGrab struct {
 func NewMxHostSummary(address net.IP) MxHostSummary {
 	result := MxHostSummary{
 		address:   address,
-		UpdatedAt: time.Now(),
+		UpdatedAt: time.Now().UTC(),
 	}
 
 	// The first connection attempt with up to TLS 1.2
@@ -47,8 +49,6 @@ func NewMxHostSummary(address net.IP) MxHostSummary {
 
 	// Was the TLS handshake successful?
 	if result.starttls != nil && *result.starttls {
-		result.tlsVersions = mapset.NewThreadUnsafeSet()
-		result.tlsCipherSuites = mapset.NewThreadUnsafeSet()
 		result.Append(grab)
 
 		// Try TLS 1.0 as well if we had a TLS 1.2 handshake
@@ -111,6 +111,14 @@ func NewMxHostGrab(address net.IP, tlsVersion uint16) *MxHostGrab {
 	// Copy Certificates
 	if tlsHandshake != nil {
 		result.certificates = tlsHandshake.ServerCertificates.ParsedCertificates
+
+		// Diffie Hellman parameters present?
+		if dhParams := tlsHandshake.DHParams; dhParams != nil {
+			// Copy size of prime number
+			size := dhParams.P.BitLen()
+			result.dhPrimeSize = &size
+		}
+
 	}
 
 	return result
@@ -160,8 +168,12 @@ func (summary *MxHostSummary) CaFingerprints() [][]byte {
 
 // Appends a MxHostGrab to the MxHostSummary
 func (summary *MxHostSummary) Append(grab *MxHostGrab) {
-	if summary.fingerprints == nil {
+	if summary.tlsVersions == nil {
+		// the first MxHostGrab
+		summary.tlsVersions = mapset.NewThreadUnsafeSet()
+		summary.tlsCipherSuites = mapset.NewThreadUnsafeSet()
 		summary.certificates = grab.certificates
+		summary.dhPrimeSize = grab.dhPrimeSize
 	}
 	summary.tlsCipherSuites.Add(string(grab.tlsCipherSuite.Bytes()))
 	summary.tlsVersions.Add(string(grab.tlsVersion.Bytes()))

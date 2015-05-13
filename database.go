@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/rsa"
 	"database/sql"
 	"encoding/hex"
 	"github.com/hashicorp/golang-lru"
@@ -151,14 +152,23 @@ func saveCertificate(cert *x509.Certificate) {
 		signatureAlgorithm := cert.SignatureAlgorithmName()
 		publicKeyAlgorithm := cert.PublicKeyAlgorithmName()
 
+		// Key length
+		var pubkeySize *int
+		switch key := cert.PublicKey.(type) {
+		case *rsa.PublicKey:
+			len := key.N.BitLen()
+			pubkeySize = &len
+		}
+
+		// Certificate validation error
 		var validationError *string
 		if cert.ValidationError() != nil {
 			err := cert.ValidationError().Error()
 			validationError = &err
 		}
 
-		_, err = dbconn.Exec("INSERT INTO certificates (id, subject_id, issuer_id, key_id, signature_algorithm, key_algorithm, is_valid, validation_error, is_self_signed, is_ca, first_seen_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, NOW())",
-			sha1sum, subject, issuer, pubkey, signatureAlgorithm, publicKeyAlgorithm, cert.Valid(), validationError, subject == issuer, cert.IsCA)
+		_, err = dbconn.Exec("INSERT INTO certificates (id, subject_id, issuer_id, key_id, key_size, signature_algorithm, key_algorithm, is_valid, validation_error, is_self_signed, is_ca, first_seen_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, NOW())",
+			sha1sum, subject, issuer, pubkey, pubkeySize, signatureAlgorithm, publicKeyAlgorithm, cert.Valid(), validationError, subject == issuer, cert.IsCA)
 		if err != nil {
 			log.Panicln(err, sha1hex)
 		}
@@ -187,6 +197,7 @@ func saveMxHostSummary(result *MxHostSummary) {
 		result.ServerFingerprint(),
 		ByteaArray(result.CaFingerprints()),
 		result.CertificateExpired(),
+		result.dhPrimeSize,
 		result.UpdatedAt,
 		address,
 	}
@@ -194,12 +205,12 @@ func saveMxHostSummary(result *MxHostSummary) {
 	switch err {
 	case sql.ErrNoRows:
 		// not yet present
-		_, err := dbconn.Exec("INSERT INTO mx_hosts (error, starttls, tls_versions, tls_cipher_suites, certificate_id, ca_certificate_ids, cert_expired, updated_at, address) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)", params...)
+		_, err := dbconn.Exec("INSERT INTO mx_hosts (error, starttls, tls_versions, tls_cipher_suites, certificate_id, ca_certificate_ids, cert_expired, dh_prime_size, updated_at, address) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)", params...)
 		if err != nil {
 			log.Panicln(err)
 		}
 	case nil:
-		_, err := dbconn.Exec("UPDATE mx_hosts SET error=$1, starttls=$2, tls_versions=$3, tls_cipher_suites=$4, certificate_id=$5, ca_certificate_ids=$6, cert_expired=$7, updated_at=$8 WHERE address = $9", params...)
+		_, err := dbconn.Exec("UPDATE mx_hosts SET error=$1, starttls=$2, tls_versions=$3, tls_cipher_suites=$4, certificate_id=$5, ca_certificate_ids=$6, cert_expired=$7, dh_prime_size, updated_at=$9 WHERE address = $10", params...)
 		if err != nil {
 			log.Panicln(err)
 		}
