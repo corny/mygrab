@@ -51,8 +51,8 @@ func NewMxHostSummary(address net.IP) MxHostSummary {
 	if result.starttls != nil && *result.starttls {
 		result.Append(grab)
 
-		// Try TLS 1.0 as well if we had a TLS 1.2 handshake
-		if grab.tlsVersion == ztls.VersionTLS12 {
+		// Try TLS 1.0 as well if we just had a higher version
+		if grab.tlsVersion > ztls.VersionTLS10 {
 			if grab = NewMxHostGrab(address, ztls.VersionTLS10); grab.TLSSuccessful() {
 				result.Append(grab)
 			}
