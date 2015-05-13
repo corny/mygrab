@@ -158,7 +158,7 @@ func saveCertificate(cert *x509.Certificate) {
 		}
 
 		_, err = dbconn.Exec("INSERT INTO certificates (id, subject_id, issuer_id, key_id, signature_algorithm, key_algorithm, is_valid, validation_error, is_self_signed, is_ca, first_seen_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, NOW())",
-			sha1sum, subject, issuer, pubkey, signatureAlgorithm, publicKeyAlgorithm, cert.IsValid(), validationError, subject == issuer, cert.IsCA)
+			sha1sum, subject, issuer, pubkey, signatureAlgorithm, publicKeyAlgorithm, cert.Valid(), validationError, subject == issuer, cert.IsCA)
 		if err != nil {
 			log.Panicln(err, sha1hex)
 		}
@@ -173,23 +173,33 @@ func saveCertificate(cert *x509.Certificate) {
 }
 
 // Saves a MxHost in the database
-func saveMxHost(result *MxHost) {
+func saveMxHostSummary(result *MxHostSummary) {
 	address := result.address.String()
 
 	var id int
 	err := dbconn.QueryRow("SELECT id FROM mx_hosts WHERE address = $1", address).Scan(&id)
 
-	params := []interface{}{result.Error, result.starttls, result.tlsVersion, result.tlsCipherSuite, result.serverFingerprint, ByteaArray(result.caFingerprints), result.certificateExpired(), result.UpdatedAt, address}
+	params := []interface{}{
+		result.Error,
+		result.starttls,
+		ByteaArray(setToByteArrays(result.tlsVersions)),
+		ByteaArray(setToByteArrays(result.tlsCipherSuites)),
+		result.ServerFingerprint(),
+		ByteaArray(result.CaFingerprints()),
+		result.CertificateExpired(),
+		result.UpdatedAt,
+		address,
+	}
 
 	switch err {
 	case sql.ErrNoRows:
 		// not yet present
-		_, err := dbconn.Exec("INSERT INTO mx_hosts (error, starttls, tls_version, tls_cipher_suite, certificate_id, ca_certificate_ids, cert_expired, updated_at, address) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)", params...)
+		_, err := dbconn.Exec("INSERT INTO mx_hosts (error, starttls, tls_versions, tls_cipher_suites, certificate_id, ca_certificate_ids, cert_expired, updated_at, address) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)", params...)
 		if err != nil {
 			log.Panicln(err)
 		}
 	case nil:
-		_, err := dbconn.Exec("UPDATE mx_hosts SET error=$1, starttls=$2, tls_version=$3, tls_cipher_suite=$4, certificate_id=$5, ca_certificate_ids=$6, cert_expired=$7, updated_at=$8 WHERE address = $9", params...)
+		_, err := dbconn.Exec("UPDATE mx_hosts SET error=$1, starttls=$2, tls_versions=$3, tls_cipher_suites=$4, certificate_id=$5, ca_certificate_ids=$6, cert_expired=$7, updated_at=$8 WHERE address = $9", params...)
 		if err != nil {
 			log.Panicln(err)
 		}
@@ -198,7 +208,7 @@ func saveMxHost(result *MxHost) {
 	}
 }
 
-// Saves a MxHost in the database
+// Saves a MxDomain in the database
 func saveMxDomain(record *TxtRecord) {
 	txt := record.String()
 

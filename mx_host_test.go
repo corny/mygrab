@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"github.com/zmap/zgrab/ztools/ztls"
 	"net"
 	"testing"
 )
@@ -26,7 +27,7 @@ func TestSimplifyStarttlsError(t *testing.T) {
 
 func TestTimeout(t *testing.T) {
 	address := net.ParseIP("192.168.254.254")
-	result := NewMxHost(address)
+	result := NewMxHostGrab(address, ztls.VersionTLS12)
 
 	if *result.Error != "i/o timeout" {
 		t.Fatal("an unexpected error occured:", result.Error)
@@ -40,7 +41,7 @@ func TestTimeout(t *testing.T) {
 
 func TestWithStarttls(t *testing.T) {
 	address := net.ParseIP("109.69.71.161")
-	result := NewMxHost(address)
+	result := NewMxHostGrab(address, ztls.VersionTLS12)
 
 	if *result.starttls != true {
 		t.Fatal("host should have starttls")
@@ -50,28 +51,24 @@ func TestWithStarttls(t *testing.T) {
 		t.Fatal("an error occured: ", result.Error)
 	}
 
-	if len(result.ServerCertificate().DNSNames) == 0 {
-		t.Fatal("DNSNames missing")
+	if len(result.certificates) == 0 {
+		t.Fatal("no certificates found")
 	}
 
-	if result.serverFingerprint == nil {
-		t.Fatal("expected not nil")
+	if len(result.certificates[0].DNSNames) == 0 {
+		t.Fatal("DNSNames missing")
 	}
 }
 
 func TestWithoutStarttls(t *testing.T) {
 	address := net.ParseIP("198.23.62.105")
-	result := NewMxHost(address)
+	result := NewMxHostGrab(address, ztls.VersionTLS12)
 
 	if *result.starttls != false {
 		t.Fatal("host should not have starttls")
 	}
 
-	if result.ServerCertificate() != nil {
-		t.Fatal("nil expected")
-	}
-
-	if result.serverFingerprint != nil {
+	if result.certificates != nil {
 		t.Fatal("nil expected")
 	}
 

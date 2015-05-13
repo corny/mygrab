@@ -21,7 +21,7 @@ type ZgrabJob struct {
 	wait sync.WaitGroup
 
 	Address net.IP
-	Result  *MxHost
+	Result  *MxHostSummary
 }
 
 type ZgrabProcessor struct {
@@ -56,7 +56,7 @@ func NewZgrabProcessor(workersCount uint) *ZgrabProcessor {
 		key := string(job.Address)
 
 		// Do the banner grab
-		result := NewMxHost(job.Address)
+		result := NewMxHostSummary(job.Address)
 		job.Result = &result
 
 		// Lock
@@ -76,7 +76,7 @@ func NewZgrabProcessor(workersCount uint) *ZgrabProcessor {
 
 		// Enqueue the result to store it in the database
 		resultProcessor.Add(job.Result)
-		if certs := job.Result.Certificates(); certs != nil {
+		if certs := job.Result.certificates; certs != nil {
 			resultProcessor.Add(certs)
 		}
 	}
@@ -102,7 +102,7 @@ func (proc *ZgrabProcessor) NewJob(address net.IP) (job *ZgrabJob) {
 	if obj, ok := proc.cache.Get(key); ok {
 		job, _ = obj.(*ZgrabJob)
 
-		if time.Since(*job.Result.UpdatedAt) <= zgrabTTL {
+		if time.Since(job.Result.UpdatedAt) <= zgrabTTL {
 			// nothing to do
 			proc.cacheHits += 1
 			exist = true

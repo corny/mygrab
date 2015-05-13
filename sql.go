@@ -19,6 +19,16 @@ func (a StringArray) Value() (driver.Value, error) {
 	}
 }
 
+func StringsToByteArray(strings []string) [][]byte {
+	arr := make([][]byte, len(strings))
+
+	for i, str := range strings {
+		arr[i] = []byte(str)
+	}
+
+	return arr
+}
+
 func (a ByteaArray) Value() (driver.Value, error) {
 
 	buffer := new(bytes.Buffer)

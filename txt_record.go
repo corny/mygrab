@@ -2,32 +2,31 @@ package main
 
 import (
 	"bytes"
-	"encoding/hex"
+	"github.com/deckarep/golang-set"
 	"strconv"
 )
 
 type TxtRecord struct {
 	domain       string
-	starttls     bool
-	fingerprints stringSet
-	tlsVersions  stringSet
-	certErrors   stringSet
+	starttls     bool       // true if all reachable hosts have starttls
+	fingerprints mapset.Set // the union of all hosts
+	certProblems mapset.Set // the union of all hosts
+	tlsVersions  mapset.Set // the intersection of all hosts
+	tlsCiphers   mapset.Set // the intersection of all hosts
 	updatedAt    int64
 }
 
-// Creates a TxtRecord from one or more MxHost objects
-func createTxtRecord(hostname string, hosts []*MxHost) (record TxtRecord) {
+// Creates a TxtRecord from one or more MxHostSummary objects
+func createTxtRecord(hostname string, hosts []*MxHostSummary) (record TxtRecord) {
 	record.domain = hostname
 
 	// Check if all reachable hosts has StartTLS
 	starttlsFound := false
 	for i, host := range hosts {
 		// Update Timestamp
-		if host.UpdatedAt != nil {
-			updatedAt := host.UpdatedAt.Unix()
-			if i == 0 || updatedAt > record.updatedAt {
-				record.updatedAt = updatedAt
-			}
+		updatedAt := host.UpdatedAt.Unix()
+		if i == 0 || updatedAt > record.updatedAt {
+			record.updatedAt = updatedAt
 		}
 
 		if host.starttls != nil {
@@ -46,23 +45,30 @@ func createTxtRecord(hostname string, hosts []*MxHost) (record TxtRecord) {
 		return
 	}
 
-	record.tlsVersions = stringSet{}
-	record.fingerprints = stringSet{}
-	record.certErrors = stringSet{}
+	record.fingerprints = mapset.NewThreadUnsafeSet()
+	record.certProblems = mapset.NewThreadUnsafeSet()
 
 	for _, host := range hosts {
-		if host.tlsVersion != nil {
-			record.tlsVersions.Add(string(*host.tlsVersion))
+		if host.tlsVersions != nil {
+			if record.tlsVersions == nil {
+				// Just copy, it's the first one
+				record.tlsVersions = host.tlsVersions
+				record.tlsCiphers = host.tlsCipherSuites
+			} else {
+				// Calculate the intersection
+				record.tlsVersions = record.tlsVersions.Intersect(host.tlsVersions)
+				record.tlsCiphers = record.tlsCiphers.Intersect(host.tlsCipherSuites)
+			}
 
-			// Has the server certificate been successfully parsed?
-			if host.serverFingerprint != nil {
-				record.fingerprints.Add(hex.EncodeToString(*host.serverFingerprint))
+			// Has the server certificate been parsed successfully?
+			if fingerprint := host.ServerFingerprint(); fingerprint != nil {
+				record.fingerprints.Add(string(*fingerprint))
 
-				if !host.certificateValidForDomain(hostname) {
-					record.certErrors.Add("mismatch")
+				if !host.CertificateValidForDomain(hostname) {
+					record.certProblems.Add("mismatch")
 				}
-				if *host.certificateExpired() {
-					record.certErrors.Add("expired")
+				if *host.CertificateExpired() {
+					record.certProblems.Add("expired")
 				}
 			}
 		}
@@ -96,17 +102,22 @@ func (record *TxtRecord) String() string {
 
 	addValue("updated", strconv.FormatInt(record.updatedAt, 10))
 
-	// Only one TLS version?
-	if record.tlsVersions.Len() == 1 {
-		addValue("tls-version", record.tlsVersions.String())
-	}
+	if record.tlsVersions != nil {
+		if record.tlsVersions.Cardinality() > 0 {
+			addValue("tls-versions", joinSet(record.tlsVersions, true))
+		}
 
-	if record.certErrors.Len() > 0 {
-		addValue("certificate-errors", record.certErrors.String())
-	}
+		if record.tlsCiphers.Cardinality() > 0 {
+			addValue("tls-ciphers", joinSet(record.tlsCiphers, true))
+		}
 
-	if len(record.fingerprints) > 0 {
-		addValue("fingerprint", record.fingerprints.String())
+		if record.fingerprints.Cardinality() > 0 {
+			addValue("fingerprints", joinSet(record.fingerprints, true))
+		}
+
+		if record.certProblems.Cardinality() > 0 {
+			addValue("certificate-problems", joinSet(record.certProblems, false))
+		}
 	}
 
 	return buffer.String()

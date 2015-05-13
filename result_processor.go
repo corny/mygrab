@@ -20,8 +20,8 @@ func NewResultProcessor(workersCount uint) *ResultProcessor {
 			}
 		case *DnsJob:
 			saveDomain(res)
-		case *MxHost:
-			saveMxHost(res)
+		case *MxHostSummary:
+			saveMxHostSummary(res)
 		case *TxtRecord:
 			saveMxDomain(res)
 		case []*x509.Certificate:
