@@ -141,7 +141,7 @@ func (summary *MxHostSummary) CertificateExpired() *bool {
 		return nil
 	}
 	cert := summary.certificates[0]
-	now := time.Now()
+	now := time.Now().UTC()
 	val := now.Before(cert.NotBefore) || now.After(cert.NotAfter)
 	return &val
 }
