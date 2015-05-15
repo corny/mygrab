@@ -175,8 +175,12 @@ func (summary *MxHostSummary) Append(grab *MxHostGrab) {
 		summary.certificates = grab.certificates
 		summary.dhPrimeSize = grab.dhPrimeSize
 	}
-	summary.tlsCipherSuites.Add(string(grab.tlsCipherSuite.Bytes()))
-	summary.tlsVersions.Add(string(grab.tlsVersion.Bytes()))
+
+	// Copy TLS parameters
+	if grab.tlsVersion != 0 {
+		summary.tlsVersions.Add(string(grab.tlsVersion.Bytes()))
+		summary.tlsCipherSuites.Add(string(grab.tlsCipherSuite.Bytes()))
+	}
 }
 
 // Checks if the certificate is valid for a given domain name
