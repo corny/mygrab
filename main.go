@@ -21,6 +21,7 @@ var (
 	dnsWorkers      uint = 500
 	dnsTimeout      uint = 10 // seconds
 	zgrabWorkers    uint = 500
+	zgrabTimeout    uint = 15
 	mxWorkers       uint = 250 // should at least as many as dnsWorkers
 	domainWorkers   uint = 250 // should at least as many as dnsWorkers
 	resultWorkers   uint = 2
@@ -45,7 +46,6 @@ func init() {
 	zlibConfig.StartTLS = true
 	zlibConfig.Banners = true
 	zlibConfig.EHLO = true
-	zlibConfig.Timeout = time.Duration(10) * time.Second
 	zlibConfig.EHLODomain, _ = os.Hostname()
 }
 
@@ -64,6 +64,7 @@ func main() {
 	flag.UintVar(&dnsWorkers, "dnsWorkers", dnsWorkers, "Number of dns workers")
 	flag.UintVar(&mxWorkers, "mxWorkers", mxWorkers, "Number of mx workers")
 	flag.UintVar(&zgrabWorkers, "zgrabWorkers", zgrabWorkers, "Number of zgrab workers")
+	flag.UintVar(&zgrabTimeout, "zgrabTimeout", zgrabTimeout, "zgrab timeout in seconds")
 	flag.UintVar(&domainWorkers, "domainWorkers", domainWorkers, "Number of dns workers")
 	flag.UintVar(&resultWorkers, "resultWorkers", resultWorkers, "Number of result workers that store results in the database")
 	flag.UintVar(&unboundDebug, "unboundDebug", unboundDebug, "Debug level for libunbound")
@@ -80,6 +81,8 @@ func main() {
 		fmt.Fprintln(os.Stderr, "  resolve-mx: Read mx records from the domains table and resolve them to A/AAAA records")
 		os.Exit(1)
 	}
+
+	zlibConfig.Timeout = time.Duration(zgrabTimeout) * time.Second
 
 	if singleWorker {
 		dnsWorkers = 1
