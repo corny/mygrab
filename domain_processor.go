@@ -22,7 +22,9 @@ func NewDomainProcessor(workersCount uint) *DomainProcessor {
 		mxAddresses := dnsProcessor.NewJob(domain, TypeMX)
 		mxAddresses.Wait()
 
-		resultProcessor.Add(mxAddresses)
+		if resultProcessor != nil {
+			resultProcessor.Add(mxAddresses)
+		}
 	}
 
 	return &DomainProcessor{workers: NewWorkerPool(workersCount, work)}

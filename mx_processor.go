@@ -22,7 +22,9 @@ func NewMxProcessor(workersCount uint) *MxProcessor {
 		mxAddresses.Wait()
 
 		// Save DNS results
-		resultProcessor.Add(mxAddresses)
+		if resultProcessor != nil {
+			resultProcessor.Add(mxAddresses)
+		}
 
 		// Make addresses unique
 		addresses := UniqueStrings(mxAddresses.Results())
@@ -48,7 +50,9 @@ func NewMxProcessor(workersCount uint) *MxProcessor {
 		}
 
 		// Save to database
-		resultProcessor.Add(&txt)
+		if resultProcessor != nil {
+			resultProcessor.Add(&txt)
+		}
 
 	}
 

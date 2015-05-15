@@ -26,7 +26,11 @@ var (
 	domainWorkers   uint = 250 // should at least as many as dnsWorkers
 	resultWorkers   uint = 2
 	unboundDebug    uint = 0
-	dbname          string
+
+	// database settings
+	dbName string
+	dbHost = "/var/run/postgresql"
+
 	dnsProcessor    *DnsProcessor
 	zgrabProcessor  *ZgrabProcessor
 	domainProcessor *DomainProcessor
@@ -69,7 +73,8 @@ func main() {
 	flag.UintVar(&resultWorkers, "resultWorkers", resultWorkers, "Number of result workers that store results in the database")
 	flag.UintVar(&unboundDebug, "unboundDebug", unboundDebug, "Debug level for libunbound")
 	flag.BoolVar(&singleWorker, "singleWorker", false, "Limit the number of worker per group to one")
-	flag.StringVar(&dbname, "dbName", dbname, "Database name")
+	flag.StringVar(&dbName, "dbName", dbName, "Database name. If omitted, not data will be saved.")
+	flag.StringVar(&dbHost, "dbHost", dbHost, "Database host or path to unix socket")
 	flag.Parse()
 	args := flag.Args()
 
@@ -95,8 +100,12 @@ func main() {
 	dnsProcessor = NewDnsProcessor(dnsWorkers)
 	zgrabProcessor = NewZgrabProcessor(zgrabWorkers)
 	domainProcessor = NewDomainProcessor(domainWorkers)
-	resultProcessor = NewResultProcessor(resultWorkers)
 	mxProcessor = NewMxProcessor(mxWorkers)
+	// Configure database
+	if dbName != "" {
+		connect("dbname=" + dbName + " host=" + dbHost)
+		resultProcessor = NewResultProcessor(resultWorkers)
+	}
 
 	if nsupdateKey != "" {
 		nsUpdater = NewNsUpdater()
@@ -106,8 +115,6 @@ func main() {
 	dnsProcessor.Configure(dnsResolver, dnsTimeout)
 	dnsProcessor.unboundCtx.DebugLevel(int(unboundDebug))
 	dnsProcessor.unboundCtx.SetOption("num-threads", string(50))
-
-	connect("dbname=" + dbname + " host=/var/run/postgresql")
 
 	gomaxprocs := runtime.NumCPU()
 	runtime.GOMAXPROCS(gomaxprocs)
