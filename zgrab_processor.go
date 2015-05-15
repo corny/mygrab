@@ -1,19 +1,10 @@
 package main
 
 import (
-	"github.com/hashicorp/golang-lru"
 	"log"
 	"net"
 	"sync"
 	"time"
-)
-
-const (
-	// Maximum age for a zgrab result
-	zgrabTTL = time.Duration(3600) * time.Second
-
-	// Cache size for zgrab results
-	zgrabCacheSize = 1024 * 10
 )
 
 type ZgrabJob struct {
@@ -24,68 +15,54 @@ type ZgrabJob struct {
 	Result  *MxHostSummary
 }
 
+type ZgrabCacheEntry struct {
+	refreshed time.Time
+	accessed  time.Time
+	job       *ZgrabJob
+}
+
 type ZgrabProcessor struct {
 	// map for active (pending/running) jobs
 	jobs map[string]*ZgrabJob
 
-	// LRU cache to reduce database load
-	cache *lru.Cache
+	// Cache
+	cache         map[string]*ZgrabCacheEntry
+	cacheChannel  chan interface{}
+	expireAfter   time.Duration
+	refreshAfter  time.Duration
+	checkInterval time.Duration
 
 	cacheHits      uint64
 	cacheMisses    uint64
+	cacheRefreshes uint64
 	cacheExpiries  uint64
 	concurrentHits uint64
 
-	// mutex for the map
+	// mutex for jobs and cache
 	mutex sync.Mutex
 
 	workers *WorkerPool
 }
 
-func NewZgrabProcessor(workersCount uint) *ZgrabProcessor {
-	var err error
+func NewZgrabProcessor(workersCount uint, expireAfter uint, refreshAfter uint, checkInterval uint) *ZgrabProcessor {
 	proc := &ZgrabProcessor{}
-
-	work := func(item interface{}) {
-		job, ok := item.(*ZgrabJob)
-		if !ok {
-			log.Panic("unexpected object:", job)
-		}
-
-		// IP addresses (byte arrays) can not be used directly
-		key := string(job.Address)
-
-		// Do the banner grab
-		result := NewMxHostSummary(job.Address)
-		job.Result = &result
-
-		// Lock
-		proc.mutex.Lock()
-
-		// Add to cache
-		proc.cache.Add(key, job)
-
-		// Remove from active jobs map
-		delete(proc.jobs, key)
-
-		// Unlock
-		proc.mutex.Unlock()
-
-		// Wake up waiting routines
-		job.wait.Done()
-
-		// Enqueue the result to store it in the database
-		resultProcessor.Add(job.Result)
-		if certs := job.Result.certificates; certs != nil {
-			resultProcessor.Add(certs)
-		}
-	}
-	proc.workers = NewWorkerPool(workersCount, work)
+	proc.workers = NewWorkerPool(workersCount, proc.work)
 	proc.jobs = make(map[string]*ZgrabJob)
 
-	// Initialize cache
-	if proc.cache, err = lru.New(zgrabCacheSize); err != nil {
-		panic(err)
+	if expireAfter > 0 {
+		proc.expireAfter = time.Duration(expireAfter) * time.Second
+		proc.refreshAfter = time.Duration(refreshAfter) * time.Second
+
+		// enable cache
+		proc.cacheChannel = make(chan interface{}, 1)
+		proc.cacheChannel <- true // start it
+		proc.cache = make(map[string]*ZgrabCacheEntry)
+		log.Println("Cache entries will be refreshed after", refreshAfter, "seconds and removed after", expireAfter, "seconds")
+
+		// Start the cache worker
+		go proc.cacheWorker()
+	} else {
+		log.Println("Host cache disabled")
 	}
 
 	return proc
@@ -99,18 +76,10 @@ func (proc *ZgrabProcessor) NewJob(address net.IP) (job *ZgrabJob) {
 	proc.mutex.Lock()
 
 	// Does the address exist in the cache?
-	if obj, ok := proc.cache.Get(key); ok {
-		job, _ = obj.(*ZgrabJob)
-
-		if time.Since(job.Result.UpdatedAt) <= zgrabTTL {
-			// nothing to do
-			proc.cacheHits += 1
-			exist = true
-		} else {
-			// Cache is outdated
-			proc.cache.Remove(key)
-			proc.cacheExpiries += 1
-		}
+	if obj, ok := proc.cache[key]; ok {
+		job = obj.job
+		exist = true
+		proc.cacheHits += 1
 	} else {
 		proc.cacheMisses += 1
 	}
@@ -138,9 +107,96 @@ func (proc *ZgrabProcessor) NewJob(address net.IP) (job *ZgrabJob) {
 
 // Stops accepting new jobs and waits until all jobs are finished
 func (proc *ZgrabProcessor) Close() {
+	if proc.cacheChannel != nil {
+		close(proc.cacheChannel)
+	}
 	proc.workers.Close()
 }
 
 func (job *ZgrabJob) Wait() {
 	job.wait.Wait()
+}
+
+func (proc *ZgrabProcessor) work(item interface{}) {
+	job, ok := item.(*ZgrabJob)
+	if !ok {
+		log.Panic("unexpected item:", job)
+	}
+
+	// IP addresses (byte arrays) can not be used directly
+	key := string(job.Address)
+
+	// Do the banner grab
+	job.Result = NewMxHostSummary(job.Address)
+
+	// Lock
+	proc.mutex.Lock()
+
+	// Update cache
+	if proc.cache != nil {
+		now := time.Now()
+		if value, ok := proc.cache[key]; ok {
+			// Existing entry has been refreshed
+			value.refreshed = now
+			value.job = job
+		} else {
+			// Add to cache
+			proc.cache[key] = &ZgrabCacheEntry{
+				job:       job,
+				refreshed: now,
+				accessed:  now,
+			}
+		}
+	}
+
+	// Remove from active jobs map
+	delete(proc.jobs, key)
+
+	// Unlock
+	proc.mutex.Unlock()
+
+	// Wake up waiting routines
+	job.wait.Done()
+
+	// Enqueue the result to store it in the database
+	if resultProcessor != nil {
+		resultProcessor.Add(job.Result)
+		if certs := job.Result.certificates; certs != nil {
+			resultProcessor.Add(certs)
+		}
+	}
+}
+
+func (proc *ZgrabProcessor) cacheWorker() {
+	for range proc.cacheChannel {
+		enqueue := make([]*ZgrabJob, 0)
+
+		proc.mutex.Lock()
+		for key, entry := range proc.cache {
+			if time.Since(entry.accessed) > proc.expireAfter {
+				// expired
+				delete(proc.cache, key)
+				proc.cacheExpiries++
+			} else if time.Since(entry.refreshed) > proc.refreshAfter {
+				// enqueue if the job is not already pending
+				if _, ok := proc.jobs[key]; !ok {
+					proc.jobs[key] = entry.job
+					proc.cacheRefreshes++
+					entry.job.wait.Add(1)
+					enqueue = append(enqueue, entry.job)
+				}
+			}
+		}
+		proc.mutex.Unlock()
+
+		// Enqueue new jobs
+		// this is a blocking operation
+		for job := range enqueue {
+			proc.workers.Add(job)
+		}
+
+		// sleep
+		time.Sleep(proc.checkInterval)
+		proc.cacheChannel <- true
+	}
 }

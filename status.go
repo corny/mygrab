@@ -22,10 +22,10 @@ func status() []byte {
 	m["result"] = poolStatus(resultProcessor.workers)
 
 	zgrabStatus := make(map[string]interface{})
-	zgrabStatus["size"] = zgrabProcessor.cache.Len()
 	zgrabStatus["hits"] = zgrabProcessor.cacheHits
 	zgrabStatus["misses"] = zgrabProcessor.cacheMisses
 	zgrabStatus["expiries"] = zgrabProcessor.cacheExpiries
+	zgrabStatus["refreshes"] = zgrabProcessor.cacheRefreshes
 	zgrabStatus["concurrentHits"] = zgrabProcessor.concurrentHits
 	m["zgrabCache"] = &zgrabStatus
 

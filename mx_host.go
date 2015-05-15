@@ -37,8 +37,8 @@ type MxHostGrab struct {
 }
 
 // Summry of multiple connection attemps to a single host
-func NewMxHostSummary(address net.IP) MxHostSummary {
-	result := MxHostSummary{
+func NewMxHostSummary(address net.IP) *MxHostSummary {
+	result := &MxHostSummary{
 		address:   address,
 		UpdatedAt: time.Now().UTC(),
 	}
@@ -58,9 +58,7 @@ func NewMxHostSummary(address net.IP) MxHostSummary {
 			if grab = NewMxHostGrab(address, ztls.VersionTLS10); grab.TLSSuccessful() {
 				result.Append(grab)
 			}
-
 		}
-
 	}
 
 	// calculate fingerprints
