@@ -47,6 +47,9 @@ func joinSet(set mapset.Set, hexEncode bool) string {
 
 // creates a comma seperated sorted list
 func setToByteArrays(set mapset.Set) [][]byte {
+	if set == nil {
+		return nil
+	}
 	items := set.ToSlice()
 	result := make([][]byte, len(items))
 
