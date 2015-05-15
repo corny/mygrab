@@ -20,7 +20,9 @@ type MxHostSummary struct {
 	tlsCipherSuites mapset.Set
 	certificates    []*x509.Certificate
 	fingerprints    [][]byte
-	dhPrimeSize     *int    // Size of Diffie Hellman prime number
+	ecdheCurveType  *byte
+	ecdheCurveId    *ztls.CurveID
+	ecdheKeyLength  *int
 	Error           *string // only the first error
 }
 
@@ -30,7 +32,7 @@ type MxHostGrab struct {
 	tlsVersion     ztls.TLSVersion
 	tlsCipherSuite ztls.CipherSuite
 	certificates   []*x509.Certificate
-	dhPrimeSize    *int // Size of Diffie Hellman prime number
+	dhParams       interface{}
 	Error          *string
 }
 
@@ -108,17 +110,14 @@ func NewMxHostGrab(address net.IP, tlsVersion uint16) *MxHostGrab {
 		result.tlsCipherSuite = tlsHello.CipherSuite
 	}
 
-	// Copy Certificates
 	if tlsHandshake != nil {
-		result.certificates = tlsHandshake.ServerCertificates.ParsedCertificates
-
-		// Diffie Hellman parameters present?
-		if dhParams := tlsHandshake.DHParams; dhParams != nil {
-			// Copy size of prime number
-			size := dhParams.P.BitLen()
-			result.dhPrimeSize = &size
+		// Certificates present?
+		if certs := tlsHandshake.ServerCertificates; certs != nil {
+			result.certificates = tlsHandshake.ServerCertificates.ParsedCertificates
 		}
 
+		// Diffie Hellman parameters present?
+		result.dhParams = tlsHandshake.DHParams
 	}
 
 	return result
@@ -173,7 +172,15 @@ func (summary *MxHostSummary) Append(grab *MxHostGrab) {
 		summary.tlsVersions = mapset.NewThreadUnsafeSet()
 		summary.tlsCipherSuites = mapset.NewThreadUnsafeSet()
 		summary.certificates = grab.certificates
-		summary.dhPrimeSize = grab.dhPrimeSize
+	}
+
+	// Copy ECDHE params
+	if summary.ecdheCurveType == nil {
+		if ecdheParams, ok := grab.dhParams.(*ztls.ECDHEParams); ok {
+			summary.ecdheCurveType = &ecdheParams.CurveType
+			summary.ecdheCurveId = &ecdheParams.CurveID
+			summary.ecdheKeyLength = &ecdheParams.PublicKeyLength
+		}
 	}
 
 	// Copy TLS parameters

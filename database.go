@@ -197,7 +197,9 @@ func saveMxHostSummary(result *MxHostSummary) {
 		result.ServerFingerprint(),
 		ByteaArray(result.CaFingerprints()),
 		result.CertificateExpired(),
-		result.dhPrimeSize,
+		result.ecdheCurveType,
+		result.ecdheCurveId,
+		result.ecdheKeyLength,
 		result.UpdatedAt,
 		address,
 	}
@@ -205,12 +207,12 @@ func saveMxHostSummary(result *MxHostSummary) {
 	switch err {
 	case sql.ErrNoRows:
 		// not yet present
-		_, err := dbconn.Exec("INSERT INTO mx_hosts (error, starttls, tls_versions, tls_cipher_suites, certificate_id, ca_certificate_ids, cert_expired, dh_prime_size, updated_at, address) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)", params...)
+		_, err := dbconn.Exec("INSERT INTO mx_hosts (error, starttls, tls_versions, tls_cipher_suites, certificate_id, ca_certificate_ids, cert_expired, ecdhe_curve_type, ecdhe_curve_id, ecdhe_key_size, updated_at, address) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)", params...)
 		if err != nil {
 			log.Panicln(err)
 		}
 	case nil:
-		_, err := dbconn.Exec("UPDATE mx_hosts SET error=$1, starttls=$2, tls_versions=$3, tls_cipher_suites=$4, certificate_id=$5, ca_certificate_ids=$6, cert_expired=$7, dh_prime_size, updated_at=$9 WHERE address = $10", params...)
+		_, err := dbconn.Exec("UPDATE mx_hosts SET error=$1, starttls=$2, tls_versions=$3, tls_cipher_suites=$4, certificate_id=$5, ca_certificate_ids=$6, cert_expired=$7, ecdhe_curve_type=$8, ecdhe_curve_id=$9, ecdhe_key_size=$10, updated_at=$11 WHERE address = $12", params...)
 		if err != nil {
 			log.Panicln(err)
 		}
