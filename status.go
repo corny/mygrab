@@ -5,11 +5,14 @@ import (
 	"log"
 )
 
+// Returns the worker and cache status as JSON
 func status() []byte {
 	poolStatus := func(pool *WorkerPool) map[string]interface{} {
 		m := make(map[string]interface{})
 		m["pending"] = len(pool.channel)
 		m["processed"] = pool.processed
+		m["workers_current"] = pool.currentWorkers
+		m["workers_max"] = pool.maxWorkers
 		return m
 	}
 
@@ -21,13 +24,13 @@ func status() []byte {
 	m["domain"] = poolStatus(domainProcessor.workers)
 	m["result"] = poolStatus(resultProcessor.workers)
 
-	zgrabStatus := make(map[string]interface{})
-	zgrabStatus["hits"] = zgrabProcessor.cacheHits
-	zgrabStatus["misses"] = zgrabProcessor.cacheMisses
-	zgrabStatus["expiries"] = zgrabProcessor.cacheExpiries
-	zgrabStatus["refreshes"] = zgrabProcessor.cacheRefreshes
-	zgrabStatus["concurrentHits"] = zgrabProcessor.concurrentHits
-	m["zgrabCache"] = &zgrabStatus
+	hostCache := make(map[string]interface{})
+	hostCache["hits"] = zgrabProcessor.cacheHits
+	hostCache["misses"] = zgrabProcessor.cacheMisses
+	hostCache["expiries"] = zgrabProcessor.cacheExpiries
+	hostCache["refreshes"] = zgrabProcessor.cacheRefreshes
+	hostCache["concurrentHits"] = zgrabProcessor.concurrentHits
+	m["hostCache"] = &hostCache
 
 	result, err := json.Marshal(m)
 	if err != nil {

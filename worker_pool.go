@@ -19,31 +19,35 @@ type WorkerPool struct {
 
 	// The function that does the work
 	work WorkerFunc
+
+	// Size of the worker pool
+	maxWorkers     uint
+	currentWorkers uint
 }
 
-func NewWorkerPool(workersCount uint, work WorkerFunc) *WorkerPool {
+func NewWorkerPool(maxWorkers uint, work WorkerFunc) *WorkerPool {
 	proc := &WorkerPool{work: work}
 	proc.channel = make(chan interface{}, 100)
-	proc.wg.Add(int(workersCount))
-
-	// Start all workers
-	for i := uint(0); i < workersCount; i++ {
-		go proc.worker()
-	}
-
+	proc.maxWorkers = maxWorkers
 	return proc
 }
 
 func (proc *WorkerPool) worker() {
 	for obj := range proc.channel {
 		proc.work(obj)
-		proc.processed += 1
+		proc.processed += 1 // not atomic
 	}
 	proc.wg.Done()
 }
 
 // Adds a new object to the channel
 func (proc *WorkerPool) Add(obj interface{}) {
+	if len(proc.channel) > 0 && proc.maxWorkers > proc.currentWorkers {
+		// Start another worker
+		proc.currentWorkers++ // not atomic, not crucial
+		proc.wg.Add(1)
+		go proc.worker()
+	}
 	proc.channel <- obj
 }
 
