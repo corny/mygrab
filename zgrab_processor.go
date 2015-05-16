@@ -27,7 +27,7 @@ type ZgrabProcessor struct {
 
 	// Cache
 	cache         map[string]*ZgrabCacheEntry
-	cacheChannel  chan interface{}
+	cacheChannel  chan bool
 	expireAfter   time.Duration
 	refreshAfter  time.Duration
 	checkInterval time.Duration
@@ -169,6 +169,7 @@ func (proc *ZgrabProcessor) work(item interface{}) {
 	}
 }
 
+// Periodically checks the cache and expires oder enqueues entries.
 func (proc *ZgrabProcessor) cacheWorker() {
 	for range proc.cacheChannel {
 		enqueue := make([]*ZgrabJob, 0)
@@ -183,21 +184,23 @@ func (proc *ZgrabProcessor) cacheWorker() {
 				// enqueue if the job is not already pending
 				if _, ok := proc.jobs[key]; !ok {
 					proc.jobs[key] = entry.job
-					proc.cacheRefreshes++
-					entry.job.wait.Add(1)
 					enqueue = append(enqueue, entry.job)
 				}
 			}
 		}
 		proc.mutex.Unlock()
 
+		// Update refreshes counter
+		proc.cacheRefreshes += len(enqueue)
+
 		// Enqueue new jobs
-		// this is a blocking operation
+		// this is a blocking operation and must not be in a locked section
 		for job := range enqueue {
+			job.wait.Add(1)
 			proc.workers.Add(job)
 		}
 
-		// sleep
+		// sleep and initiate the next run
 		time.Sleep(proc.checkInterval)
 		proc.cacheChannel <- true
 	}
