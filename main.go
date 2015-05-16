@@ -17,6 +17,7 @@ import (
 var (
 	socketPath    string
 	zlibConfig         = &zlib.Config{}
+	dnsZone            = "."
 	dnsResolver        = "8.8.8.8:53"
 	dnsWorkers    uint = 500
 	dnsTimeout    uint = 10 // seconds
@@ -64,6 +65,7 @@ func main() {
 	flag.StringVar(&zlibConfig.EHLODomain, "ehlo", zlibConfig.EHLODomain, "Send an EHLO with the specified domain (implies --smtp)")
 	flag.StringVar(&dnsResolver, "dnsResolver", dnsResolver, "DNS resolver address")
 	flag.UintVar(&dnsTimeout, "dnsTimeout", dnsTimeout, "DNS timeout in seconds")
+	flag.StringVar(&dnsZone, "dnsZone", dnsZone, "The zone for nsupdate and serving TXT records. 'example.com' will serve a TXT record for some-domain.com at 'some-domain.com.example.com'.")
 
 	// nsupdate
 	flag.StringVar(&nsupdateKey, "nsupdateKey", "", "path to nsupdate key. If ommited, no updates will happen.")

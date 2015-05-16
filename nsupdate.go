@@ -16,7 +16,6 @@ const (
 )
 
 var (
-	dnsZone             = "tls-scan.informatik.uni-bremen.de"
 	nsupdateServer      = "127.0.0.1"
 	nsupdateTTL    uint = 900
 	nsupdateKey    string
