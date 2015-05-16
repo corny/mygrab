@@ -29,7 +29,6 @@ func status() []byte {
 	hostCache["misses"] = zgrabProcessor.cacheMisses
 	hostCache["expiries"] = zgrabProcessor.cacheExpiries
 	hostCache["refreshes"] = zgrabProcessor.cacheRefreshes
-	hostCache["concurrentHits"] = zgrabProcessor.concurrentHits
 	m["hostCache"] = &hostCache
 
 	result, err := json.Marshal(m)

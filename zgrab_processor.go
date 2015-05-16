@@ -11,22 +11,20 @@ type ZgrabJob struct {
 	// waitGroup for the waiting routines
 	wait sync.WaitGroup
 
+	// Is the job currently enqueued or beeing processed?
+	pending bool
+
 	Address net.IP
 	Result  *MxHostSummary
-}
 
-type ZgrabCacheEntry struct {
+	// Cache attributes
 	refreshed time.Time
 	accessed  time.Time
-	job       *ZgrabJob
 }
 
 type ZgrabProcessor struct {
-	// map for active (pending/running) jobs
-	jobs map[string]*ZgrabJob
-
-	// Cache
-	cache         map[string]*ZgrabCacheEntry
+	// Cache for enqueued, running and finished jobs
+	cache         map[string]*ZgrabJob
 	cacheChannel  chan bool
 	expireAfter   time.Duration
 	refreshAfter  time.Duration
@@ -37,9 +35,8 @@ type ZgrabProcessor struct {
 	cacheMisses    uint64
 	cacheRefreshes uint64
 	cacheExpiries  uint64
-	concurrentHits uint64
 
-	// mutex for jobs and cache
+	// mutex for the cache
 	mutex sync.Mutex
 
 	workers *WorkerPool
@@ -48,7 +45,7 @@ type ZgrabProcessor struct {
 func NewZgrabProcessor(workersCount uint, expireAfter uint, refreshAfter uint, checkInterval uint) *ZgrabProcessor {
 	proc := &ZgrabProcessor{}
 	proc.workers = NewWorkerPool(workersCount, proc.work)
-	proc.jobs = make(map[string]*ZgrabJob)
+	proc.cache = make(map[string]*ZgrabJob)
 
 	if expireAfter > 0 {
 		proc.expireAfter = time.Duration(expireAfter) * time.Second
@@ -58,7 +55,6 @@ func NewZgrabProcessor(workersCount uint, expireAfter uint, refreshAfter uint, c
 		// enable cache
 		proc.cacheChannel = make(chan bool, 1)
 		proc.cacheChannel <- true // start it
-		proc.cache = make(map[string]*ZgrabCacheEntry)
 		log.Println("Cache entries will be refreshed after", refreshAfter, "seconds and removed after", expireAfter, "seconds")
 
 		// Start the cache worker
@@ -80,30 +76,22 @@ func (proc *ZgrabProcessor) NewJob(address net.IP) (job *ZgrabJob) {
 	proc.mutex.Lock()
 
 	// Does the address exist in the cache?
-	if entry, ok := proc.cache[key]; ok {
-		job = entry.job
-		exist = true
-		entry.accessed = time.Now()
+	if job, exist = proc.cache[key]; exist {
 		proc.cacheHits += 1
 	} else {
 		proc.cacheMisses += 1
-	}
-
-	if !exist {
-		// Is there already an active job with the same address?
-		if job, exist = proc.jobs[key]; exist {
-			proc.concurrentHits += 1
-		} else {
-			// Add to active jobs map
-			job = &ZgrabJob{Address: address}
-			proc.jobs[key] = job
-		}
+		// Add to active jobs map
+		job = &ZgrabJob{Address: address, pending: true}
+		job.wait.Add(1)
+		proc.cache[key] = job
 	}
 
 	proc.mutex.Unlock()
 
+	// Update access time
+	job.accessed = time.Now()
+
 	if !exist {
-		job.wait.Add(1)
 		proc.workers.Add(job)
 	}
 
@@ -118,7 +106,7 @@ func (proc *ZgrabProcessor) Close() {
 	proc.workers.Close()
 }
 
-// Wait until all jobs are finished
+// Wait until the job is finished
 func (job *ZgrabJob) Wait() {
 	job.wait.Wait()
 }
@@ -130,39 +118,23 @@ func (proc *ZgrabProcessor) work(item interface{}) {
 		log.Panic("unexpected item:", job)
 	}
 
-	// IP addresses (byte arrays) can not be used directly
-	key := string(job.Address)
-
 	// Do the banner grab
 	job.Result = NewMxHostSummary(job.Address)
 
 	// Lock
 	proc.mutex.Lock()
 
-	// Update cache
-	if proc.cache != nil {
-		now := time.Now()
-		if value, ok := proc.cache[key]; ok {
-			// Existing entry has been refreshed
-			value.refreshed = now
-			value.job = job
-		} else {
-			// Add to cache
-			proc.cache[key] = &ZgrabCacheEntry{
-				job:       job,
-				refreshed: now,
-				accessed:  now,
-			}
-		}
+	// Expire the entry immediately?
+	if proc.expireAfter == 0 {
+		delete(proc.cache, string(job.Address))
 	}
-
-	// Remove from active jobs map
-	delete(proc.jobs, key)
 
 	// Unlock
 	proc.mutex.Unlock()
 
-	// Wake up waiting routines
+	// Mark as finished and wake up waiting routines
+	job.refreshed = time.Now()
+	job.pending = false
 	job.wait.Done()
 
 	// Enqueue the result to store it in the database
@@ -180,16 +152,17 @@ func (proc *ZgrabProcessor) cacheWorker() {
 		enqueue := make([]*ZgrabJob, 0)
 
 		proc.mutex.Lock()
-		for key, entry := range proc.cache {
-			if time.Since(entry.accessed) > proc.expireAfter {
-				// expired
-				delete(proc.cache, key)
-				proc.cacheExpiries++
-			} else if time.Since(entry.refreshed) > proc.refreshAfter {
-				// enqueue if the job is not already pending
-				if _, ok := proc.jobs[key]; !ok {
-					proc.jobs[key] = entry.job
-					enqueue = append(enqueue, entry.job)
+		for key, job := range proc.cache {
+			if !job.pending {
+				if time.Since(job.accessed) > proc.expireAfter {
+					// expire the job
+					delete(proc.cache, key)
+					proc.cacheExpiries++
+				} else if time.Since(job.refreshed) > proc.refreshAfter {
+					// enqueue the job
+					job.pending = true
+					job.wait.Add(1)
+					enqueue = append(enqueue, job)
 				}
 			}
 		}
@@ -201,7 +174,6 @@ func (proc *ZgrabProcessor) cacheWorker() {
 		// Enqueue new jobs
 		// this is a blocking operation and must not be in a locked section
 		for _, job := range enqueue {
-			job.wait.Add(1)
 			proc.workers.Add(job)
 		}
 
