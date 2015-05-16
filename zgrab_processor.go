@@ -56,7 +56,7 @@ func NewZgrabProcessor(workersCount uint, expireAfter uint, refreshAfter uint, c
 		proc.checkInterval = time.Duration(checkInterval) * time.Second
 
 		// enable cache
-		proc.cacheChannel = make(chan interface{}, 1)
+		proc.cacheChannel = make(chan bool, 1)
 		proc.cacheChannel <- true // start it
 		proc.cache = make(map[string]*ZgrabCacheEntry)
 		log.Println("Cache entries will be refreshed after", refreshAfter, "seconds and removed after", expireAfter, "seconds")
@@ -70,7 +70,9 @@ func NewZgrabProcessor(workersCount uint, expireAfter uint, refreshAfter uint, c
 	return proc
 }
 
-// Creates a new job
+// If a finished job is already in the cache, it is returned
+// If a job is already pending, it is returned.
+// Otherwise a new job is created and returned.
 func (proc *ZgrabProcessor) NewJob(address net.IP) (job *ZgrabJob) {
 	key := string(address)
 	exist := false
@@ -78,9 +80,10 @@ func (proc *ZgrabProcessor) NewJob(address net.IP) (job *ZgrabJob) {
 	proc.mutex.Lock()
 
 	// Does the address exist in the cache?
-	if obj, ok := proc.cache[key]; ok {
-		job = obj.job
+	if entry, ok := proc.cache[key]; ok {
+		job = entry.job
 		exist = true
+		entry.accessed = time.Now()
 		proc.cacheHits += 1
 	} else {
 		proc.cacheMisses += 1
@@ -115,10 +118,12 @@ func (proc *ZgrabProcessor) Close() {
 	proc.workers.Close()
 }
 
+// Wait until all jobs are finished
 func (job *ZgrabJob) Wait() {
 	job.wait.Wait()
 }
 
+// The worker function for a job
 func (proc *ZgrabProcessor) work(item interface{}) {
 	job, ok := item.(*ZgrabJob)
 	if !ok {
@@ -191,11 +196,11 @@ func (proc *ZgrabProcessor) cacheWorker() {
 		proc.mutex.Unlock()
 
 		// Update refreshes counter
-		proc.cacheRefreshes += len(enqueue)
+		proc.cacheRefreshes += uint64(len(enqueue))
 
 		// Enqueue new jobs
 		// this is a blocking operation and must not be in a locked section
-		for job := range enqueue {
+		for _, job := range enqueue {
 			job.wait.Add(1)
 			proc.workers.Add(job)
 		}
