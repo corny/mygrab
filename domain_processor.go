@@ -18,7 +18,7 @@ func NewDomainProcessor(workersCount uint) *DomainProcessor {
 
 		log.Println(domain)
 
-		// Do the A/AAAA lookups
+		// Do the MX lookups
 		mxAddresses := dnsProcessor.NewJob(domain, TypeMX)
 		mxAddresses.Wait()
 

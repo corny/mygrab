@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/miekg/dns"
+	"log"
 	"net"
 )
 
@@ -10,61 +11,78 @@ var (
 )
 
 type MxProcessor struct {
-	workers *WorkerPool
+	cache *CachedWorkerPool
 }
 
-func NewMxProcessor(workersCount uint) *MxProcessor {
-	work := func(item interface{}) {
-		hostname, _ := item.(string)
+func NewMxProcessor(workersCount uint, cacheConfig *CacheConfig) *MxProcessor {
+	proc := &MxProcessor{}
+	proc.cache = NewCachedWorkerPool(workersCount, proc.work, cacheConfig)
+	return proc
+}
 
-		// Do the A/AAAA lookups
-		mxAddresses := dnsProcessor.NewJobs(hostname, addressTypes)
-		mxAddresses.Wait()
+func (proc *MxProcessor) NewJob(hostname string) *CacheEntry {
+	return proc.cache.NewJob(hostname)
+}
 
-		// Save DNS results
-		if resultProcessor != nil {
-			resultProcessor.Add(mxAddresses)
-		}
+// If the hostname exists in the cache it returns its Value.
+// Otherwise is creates a job and returns nil.
+func (proc *MxProcessor) GetValue(hostname string) *string {
+	job := proc.NewJob(hostname)
+	value, _ := job.Value.(*string)
+	return value
+}
 
-		// Make addresses unique
-		addresses := UniqueStrings(mxAddresses.Results())
+// Stops accepting new jobs and waits until all jobs are finished
+func (proc *MxProcessor) Close() {
+	proc.cache.Close()
+}
 
-		jobs := make([]*ZgrabJob, len(addresses))
-		hosts := make([]*MxHostSummary, len(addresses))
+func (proc *MxProcessor) work(obj interface{}) {
+	entry, _ := obj.(*CacheEntry)
+	hostname := entry.Key
 
-		for i, addr := range addresses {
-			// Do the bannergrabs
-			jobs[i] = zgrabProcessor.NewJob(net.ParseIP(addr))
-		}
+	// Do the A/AAAA lookups
+	mxAddresses := dnsProcessor.NewJobs(hostname, addressTypes)
+	mxAddresses.Wait()
 
-		for i, job := range jobs {
-			job.Wait()
-			hosts[i] = job.Result
-		}
-
-		txt := createTxtRecord(hostname, hosts)
-
-		// Update Nameserver
-		if nsUpdater != nil {
-			nsUpdater.Add(hostname, txt.String())
-		}
-
-		// Save to database
-		if resultProcessor != nil {
-			resultProcessor.Add(&txt)
-		}
-
+	// Save DNS results
+	if resultProcessor != nil {
+		resultProcessor.Add(mxAddresses)
 	}
 
-	return &MxProcessor{workers: NewWorkerPool(workersCount, work)}
-}
+	// Make addresses unique
+	addresses := UniqueStrings(mxAddresses.Results())
 
-// Creates a new job
-func (proc *MxProcessor) NewJob(hostname string) {
-	proc.workers.Add(hostname)
-}
+	jobs := make([]*CacheEntry, len(addresses))
+	hosts := make([]*MxHostSummary, len(addresses))
 
-// Creates a new job
-func (proc *MxProcessor) Close() {
-	proc.workers.Close()
+	// Do the host checks
+	for i, addr := range addresses {
+		jobs[i] = hostProcessor.NewJob(net.ParseIP(addr))
+	}
+
+	// Wait for the host checks to be finished
+	for i, job := range jobs {
+		job.Wait()
+		hostSummary, _ := job.Value.(*MxHostSummary)
+		hosts[i] = hostSummary
+	}
+
+	txtRecord := createTxtRecord(hostname, hosts)
+	txtString := txtRecord.String()
+
+	// Set value for the cache
+	entry.Value = &txtString
+
+	log.Println("TXT:", txtString)
+
+	// Update Nameserver
+	if nsUpdater != nil {
+		nsUpdater.Add(hostname, txtString)
+	}
+
+	// Save to database
+	if resultProcessor != nil {
+		resultProcessor.Add(&txtRecord)
+	}
 }

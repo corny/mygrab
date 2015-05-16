@@ -10,39 +10,49 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 )
 
 var (
-	socketPath    string
-	zlibConfig         = &zlib.Config{}
-	dnsZone            = "."
-	dnsResolver        = "8.8.8.8:53"
-	dnsWorkers    uint = 500
-	dnsTimeout    uint = 10 // seconds
-	zgrabWorkers  uint = 500
-	zgrabTimeout  uint = 15
-	mxWorkers     uint = 250 // should at least as many as dnsWorkers
-	domainWorkers uint = 250 // should at least as many as dnsWorkers
-	resultWorkers uint = 2
-	unboundDebug  uint = 0
+	socketPath         string
+	zlibConfig              = &zlib.Config{}
+	dnsZone                 = "."
+	dnsResolver             = "8.8.8.8:53"
+	dnsResolverTimeout uint = 10 // seconds
+	dnsWorkers         uint = 500
+	dnsServerEnabled   bool
+	mxWorkers          uint = 250 // should at least as many as dnsWorkers
+	domainWorkers      uint = 250 // should at least as many as dnsWorkers
+	resultWorkers      uint = 2
+	unboundDebug       uint = 0
 
-	// host cache for zgrab
-	hostExpires  uint = 900
-	hostRefresh  uint = 900
-	hostInterval uint = 60
+	// host settings
+	hostCacheEnabled  bool
+	hostCacheExpires  uint = 3600
+	hostCacheRefresh  uint = 0
+	hostCacheInterval uint = 60
+	hostWorkers       uint = 500
+	hostTimeout       uint = 15
+
+	// mx cache
+	mxCacheEnabled  bool
+	mxCacheExpires  uint = 3600
+	mxCacheRefresh  uint = 0
+	mxCacheInterval uint = 60
 
 	// database settings
 	dbName string
 	dbHost = "/var/run/postgresql"
 
-	dnsProcessor    *DnsProcessor
-	zgrabProcessor  *ZgrabProcessor
-	domainProcessor *DomainProcessor
-	mxProcessor     *MxProcessor
-	resultProcessor *ResultProcessor
-	nsUpdater       *NsUpdater
+	dnsProcessor    *DnsProcessor    // dns lookups
+	hostProcessor   *HostProcessor   // host checks
+	domainProcessor *DomainProcessor // uses the dnsProcessor for MX lookups and saves the domain
+	mxProcessor     *MxProcessor     // uses the dnsProcessor for A/AAAA lookups, the hostProcessor for hostChecks and creates TXT records
+	resultProcessor *ResultProcessor // stores results in a postgres database
+	nsUpdater       *NsUpdater       // passes txt records to nsupdate
+	dnsServer       *DnsServer       // creates a DNS server
 )
 
 type Decoder interface {
@@ -64,8 +74,9 @@ func main() {
 
 	flag.StringVar(&zlibConfig.EHLODomain, "ehlo", zlibConfig.EHLODomain, "Send an EHLO with the specified domain (implies --smtp)")
 	flag.StringVar(&dnsResolver, "dnsResolver", dnsResolver, "DNS resolver address")
-	flag.UintVar(&dnsTimeout, "dnsTimeout", dnsTimeout, "DNS timeout in seconds")
+	flag.UintVar(&dnsResolverTimeout, "dnsResolverTimeout", dnsResolverTimeout, "DNS timeout in seconds")
 	flag.StringVar(&dnsZone, "dnsZone", dnsZone, "The zone for nsupdate and serving TXT records. 'example.com' will serve a TXT record for some-domain.com at 'some-domain.com.example.com'.")
+	flag.BoolVar(&dnsServerEnabled, "dnsServerEnabled", dnsServerEnabled, "Enable the internal dns server")
 
 	// nsupdate
 	flag.StringVar(&nsupdateKey, "nsupdateKey", "", "path to nsupdate key. If ommited, no updates will happen.")
@@ -73,15 +84,22 @@ func main() {
 	flag.StringVar(&nsupdateServer, "nsupdateServer", nsupdateServer, "nsupdate server")
 
 	// host cache
-	flag.UintVar(&hostExpires, "hostExpires", hostExpires, "A host result will be removed after this number of seconds not accessed. A value of 0 disables the cache.")
-	flag.UintVar(&hostRefresh, "hostRefresh", hostRefresh, "A host result will be refreshed after this number of seconds. A value of 0 means it will never be refreshed.")
-	flag.UintVar(&hostInterval, "hostInterval", hostInterval, "The cache worker will sleep for this duration of seconds between runs.")
+	flag.BoolVar(&hostCacheEnabled, "hostCacheEnabled", hostCacheEnabled, "Always true if dnsServer is enabled or command is 'import-mx'")
+	flag.UintVar(&hostCacheExpires, "hostCacheExpires", hostCacheExpires, "A host result will be removed after this number of seconds not accessed. A value of 0 disables the cache.")
+	flag.UintVar(&hostCacheRefresh, "hostCacheRefresh", hostCacheRefresh, "A host result will be refreshed after this number of seconds. A value of 0 means it will never be refreshed.")
+	flag.UintVar(&hostCacheInterval, "hostCacheInterval", hostCacheInterval, "The cache worker will sleep for this duration of seconds between runs.")
+
+	// mx/txt Cache
+	flag.BoolVar(&mxCacheEnabled, "mxCacheEnabled", mxCacheEnabled, "Always true if dnsServer is enabled or command is 'import-mx'")
+	flag.UintVar(&mxCacheExpires, "mxCacheExpires", mxCacheExpires, "A/AAAA will be removed after this number of seconds not accessed. A value of 0 disables the cache.")
+	flag.UintVar(&mxCacheRefresh, "mxCacheRefresh", mxCacheRefresh, "A mxCache result will be refreshed after this number of seconds. A value of 0 means it will never be refreshed.")
+	flag.UintVar(&mxCacheInterval, "mxCacheInterval", mxCacheInterval, "The cache worker will sleep for this duration of seconds between runs.")
 
 	flag.StringVar(&socketPath, "socket", "", "Read from a socket instead of stdin")
 	flag.UintVar(&dnsWorkers, "dnsWorkers", dnsWorkers, "Number of dns workers")
 	flag.UintVar(&mxWorkers, "mxWorkers", mxWorkers, "Number of mx workers")
-	flag.UintVar(&zgrabWorkers, "zgrabWorkers", zgrabWorkers, "Number of zgrab workers")
-	flag.UintVar(&zgrabTimeout, "zgrabTimeout", zgrabTimeout, "zgrab timeout in seconds")
+	flag.UintVar(&hostWorkers, "hostWorkers", hostWorkers, "Number of zgrab workers")
+	flag.UintVar(&hostTimeout, "hostTimeout", hostTimeout, "zgrab timeout in seconds")
 	flag.UintVar(&domainWorkers, "domainWorkers", domainWorkers, "Number of dns workers")
 	flag.UintVar(&resultWorkers, "resultWorkers", resultWorkers, "Number of result workers that store results in the database")
 	flag.UintVar(&unboundDebug, "unboundDebug", unboundDebug, "Debug level for libunbound")
@@ -102,19 +120,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	if hostInterval == 0 {
-		log.Fatalln("hostInterval must be > 0")
-	}
-
-	if zgrabTimeout == 0 {
-		log.Fatalln("zgrabTimeout must be > 0")
+	if hostTimeout == 0 {
+		log.Fatalln("hostTimeout must be > 0")
 
 	}
-	zlibConfig.Timeout = time.Duration(zgrabTimeout) * time.Second
+	zlibConfig.Timeout = time.Duration(hostTimeout) * time.Second
 
 	if singleWorker {
 		dnsWorkers = 1
-		zgrabWorkers = 1
+		hostWorkers = 1
 		domainWorkers = 1
 		resultWorkers = 1
 		mxWorkers = 1
@@ -123,7 +137,7 @@ func main() {
 	// disable cache if command ist import-addresses
 	// we assume that the input has not duplicates
 	if command == "import-addresses" {
-		hostExpires = 0
+		hostCacheExpires = 0
 	}
 
 	// Configure database
@@ -137,13 +151,40 @@ func main() {
 		nsUpdater = NewNsUpdater()
 	}
 
+	// Append dot to dnsZone if missing
+	if !strings.HasSuffix(dnsZone, ".") {
+		dnsZone = dnsZone + "."
+	}
+
+	// Configure caching
+	if dnsServerEnabled {
+		hostCacheEnabled = true
+		mxCacheEnabled = true
+	}
+	var mxCache *CacheConfig
+	var hostCache *CacheConfig
+
+	if hostCacheEnabled {
+		if hostCacheInterval == 0 {
+			log.Fatalln("hostCacheInterval must be > 0")
+		}
+		hostCache = NewCacheConfig(hostCacheExpires, hostCacheRefresh, hostCacheInterval)
+	}
+
+	if mxCacheEnabled {
+		if mxCacheInterval == 0 {
+			log.Fatalln("mxCacheInterval must be > 0")
+		}
+		mxCache = NewCacheConfig(mxCacheExpires, mxCacheRefresh, mxCacheInterval)
+	}
+
 	dnsProcessor = NewDnsProcessor(dnsWorkers)
-	zgrabProcessor = NewZgrabProcessor(zgrabWorkers, hostExpires, hostRefresh, hostInterval)
 	domainProcessor = NewDomainProcessor(domainWorkers)
-	mxProcessor = NewMxProcessor(mxWorkers)
+	hostProcessor = NewHostProcessor(hostWorkers, hostCache)
+	mxProcessor = NewMxProcessor(mxWorkers, mxCache)
 
 	// Configure DNS
-	dnsProcessor.Configure(dnsResolver, dnsTimeout)
+	dnsProcessor.Configure(dnsResolver, dnsResolverTimeout)
 	dnsProcessor.unboundCtx.DebugLevel(int(unboundDebug))
 	dnsProcessor.unboundCtx.SetOption("num-threads", string(50))
 
@@ -154,6 +195,9 @@ func main() {
 
 	// Start control socket handler
 	go controlSocket()
+
+	// Start the DNS server
+	dnsServer = NewDnsServer()
 
 	var err error
 
@@ -180,10 +224,14 @@ func stopProcessors() {
 	mxProcessor.Close()
 	domainProcessor.Close()
 	dnsProcessor.Close()
-	zgrabProcessor.Close()
+	hostProcessor.Close()
 
 	if resultProcessor != nil {
 		resultProcessor.Close()
+	}
+
+	if dnsServer != nil {
+		dnsServer.Close()
 	}
 
 	if nsUpdater != nil {

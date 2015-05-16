@@ -8,15 +8,12 @@ import (
 
 func processCommand(command string, input *bufio.Scanner, output *bufio.Writer) error {
 
+	var str []byte
+	var err error
+
 	switch command {
 	case "status":
-		output.Write(status())
-		_, err := output.Write([]byte("\n"))
-
-		if err != nil {
-			return err
-		}
-
+		str, err = status()
 	case "import-domains":
 		for input.Scan() {
 			domainProcessor.Add(input.Text())
@@ -27,12 +24,30 @@ func processCommand(command string, input *bufio.Scanner, output *bufio.Writer) 
 		}
 	case "import-addresses":
 		for input.Scan() {
-			zgrabProcessor.NewJob(net.ParseIP(input.Text()))
+			hostProcessor.NewJob(net.ParseIP(input.Text()))
 		}
 	case "resolve-mx":
 		resolveDomainMxHosts()
+	case "cache-mx":
+		str, err = cacheStatus(mxProcessor.cache, nil)
+	case "cache-hosts":
+		converter := func(str string) string {
+			return net.IP(str).String()
+		}
+		str, err = cacheStatus(hostProcessor.cache, converter)
 	default:
 		return errors.New("unknown command: " + command)
+	}
+
+	if err != nil {
+		return err
+	}
+	if str != nil {
+		_, err = output.Write(str)
+		if err != nil {
+			return err
+		}
+		output.Write([]byte("\n"))
 	}
 
 	return nil

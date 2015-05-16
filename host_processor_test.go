@@ -6,44 +6,43 @@ import (
 	"testing"
 )
 
-func TestZgrabConcurrency(t *testing.T) {
-	processor := NewZgrabProcessor(0)
+func TestHostConcurrency(t *testing.T) {
+	processor := NewHostProcessor(0, nil)
 	targetA := net.ParseIP("127.0.0.1")
 	targetB := net.ParseIP("127.0.0.1")
 
 	processor.NewJob(targetA)
 	processor.NewJob(targetB)
 
-	if processor.concurrentHits != 1 {
-		t.Fatal("invalid concurrent hits: ", processor.concurrentHits)
+	if processor.cache.cacheHits != 1 {
+		t.Fatal("invalid concurrent Hits: ", processor.cache.cacheHits)
 	}
 
-	length := len(processor.workers.channel)
+	length := len(processor.cache.workers.channel)
 	if length != 1 {
 		t.Fatal("invalid channel length: ", length)
 	}
 }
 
-func TestZgrabCache(t *testing.T) {
-	resultProcessor = NewResultProcessor(0)
-	processor := NewZgrabProcessor(1)
+func TestHostCache(t *testing.T) {
+	processor := NewHostProcessor(1, nil)
 	targetA := net.ParseIP("127.0.0.1")
 	targetB := net.ParseIP("127.0.0.1")
 
 	processor.NewJob(targetA)
 	processor.Close()
 
-	if processor.cacheMisses != 1 {
-		t.Fatal("invalid cache misses: ", processor.cacheMisses)
+	if processor.cache.cacheMisses != 1 {
+		t.Fatal("invalid cache misses: ", processor.cache.cacheMisses)
 	}
 
 	processor.NewJob(targetB)
 
-	if processor.cacheHits != 1 {
-		t.Fatal("invalid cache hits: ", processor.cacheHits)
+	if processor.cache.cacheHits != 1 {
+		t.Fatal("invalid cache Hits: ", processor.cache.cacheHits)
 	}
-	if processor.cacheMisses != 1 {
-		t.Fatal("invalid cache misses: ", processor.cacheMisses)
+	if processor.cache.cacheMisses != 1 {
+		t.Fatal("invalid cache misses: ", processor.cache.cacheMisses)
 	}
 }
 
