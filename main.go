@@ -161,18 +161,17 @@ func main() {
 		// Wait for SIGINT or SIGTERM
 		sigs := make(chan os.Signal, 1)
 		signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-		<-sigs
+		sig := <-sigs
+		log.Println("received", sig)
 	} else {
 		// Process Command
 		err = processCommand(args[0], bufio.NewScanner(os.Stdin), bufio.NewWriter(os.Stdout))
-		if err != nil {
-			os.Stdout.WriteString(err.Error())
-		}
 	}
 
 	stopProcessors()
 
 	if err != nil {
+		os.Stdout.WriteString(err.Error())
 		os.Exit(1)
 	}
 }
@@ -182,7 +181,10 @@ func stopProcessors() {
 	domainProcessor.Close()
 	dnsProcessor.Close()
 	zgrabProcessor.Close()
-	resultProcessor.Close()
+
+	if resultProcessor != nil {
+		resultProcessor.Close()
+	}
 
 	if nsUpdater != nil {
 		nsUpdater.Close()
