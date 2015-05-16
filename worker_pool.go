@@ -42,7 +42,7 @@ func (proc *WorkerPool) worker() {
 
 // Adds a new object to the channel
 func (proc *WorkerPool) Add(obj interface{}) {
-	if len(proc.channel) > 0 && proc.maxWorkers > proc.currentWorkers {
+	if proc.currentWorkers == 0 || (len(proc.channel) > 0 && proc.maxWorkers > proc.currentWorkers) {
 		// Start another worker
 		proc.currentWorkers++ // not atomic, not crucial
 		proc.wg.Add(1)
