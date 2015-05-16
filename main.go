@@ -100,6 +100,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	if hostInterval == 0 {
+		log.Fatalln("hostInterval must be > 0")
+	}
+
+	if zgrabTimeout == 0 {
+		log.Fatalln("zgrabTimeout must be > 0")
+
+	}
 	zlibConfig.Timeout = time.Duration(zgrabTimeout) * time.Second
 
 	if singleWorker {

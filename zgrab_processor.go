@@ -32,6 +32,7 @@ type ZgrabProcessor struct {
 	refreshAfter  time.Duration
 	checkInterval time.Duration
 
+	// Statistics
 	cacheHits      uint64
 	cacheMisses    uint64
 	cacheRefreshes uint64
@@ -52,6 +53,7 @@ func NewZgrabProcessor(workersCount uint, expireAfter uint, refreshAfter uint, c
 	if expireAfter > 0 {
 		proc.expireAfter = time.Duration(expireAfter) * time.Second
 		proc.refreshAfter = time.Duration(refreshAfter) * time.Second
+		proc.checkInterval = time.Duration(checkInterval) * time.Second
 
 		// enable cache
 		proc.cacheChannel = make(chan interface{}, 1)
