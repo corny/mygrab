@@ -21,6 +21,7 @@ var (
 	dnsZone                 = "."
 	dnsResolver             = "8.8.8.8:53"
 	dnsResolverTimeout uint = 10 // seconds
+	dnsTTL             uint = 600
 	dnsWorkers         uint = 500
 	dnsServerEnabled   bool
 	mxWorkers          uint = 250 // should at least as many as dnsWorkers
@@ -75,13 +76,13 @@ func main() {
 	flag.StringVar(&zlibConfig.EHLODomain, "ehlo", zlibConfig.EHLODomain, "Send an EHLO with the specified domain (implies --smtp)")
 	flag.StringVar(&dnsResolver, "dnsResolver", dnsResolver, "DNS resolver address")
 	flag.UintVar(&dnsResolverTimeout, "dnsResolverTimeout", dnsResolverTimeout, "DNS timeout in seconds")
-	flag.StringVar(&dnsZone, "dnsZone", dnsZone, "The zone for nsupdate and serving TXT records. 'example.com' will serve a TXT record for some-domain.com at 'some-domain.com.example.com'.")
+	flag.StringVar(&dnsZone, "dnsZone", dnsZone, "The zone for nsupdate and the internal DNS server. 'example.com' will serve a TXT record for some-domain.com at 'some-domain.com.example.com'.")
+	flag.UintVar(&dnsTTL, "dnsTTL", dnsTTL, "TTL for DNS dns records")
 	flag.BoolVar(&dnsServerEnabled, "dnsServerEnabled", dnsServerEnabled, "Enable the internal dns server")
 
 	// nsupdate
 	flag.StringVar(&nsupdateKey, "nsupdateKey", "", "path to nsupdate key. If ommited, no updates will happen.")
-	flag.UintVar(&nsupdateTTL, "nsupdateTTL", nsupdateTTL, "TTL for DNS entries")
-	flag.StringVar(&nsupdateServer, "nsupdateServer", nsupdateServer, "nsupdate server")
+	flag.StringVar(&nsupdateServer, "nsupdateServer", nsupdateServer, "dns server for nsupdate")
 
 	// host cache
 	flag.BoolVar(&hostCacheEnabled, "hostCacheEnabled", hostCacheEnabled, "Always true if dnsServer is enabled or command is 'import-mx'")

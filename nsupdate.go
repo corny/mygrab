@@ -16,8 +16,7 @@ const (
 )
 
 var (
-	nsupdateServer      = "127.0.0.1"
-	nsupdateTTL    uint = 900
+	nsupdateServer = "127.0.0.1"
 	nsupdateKey    string
 )
 
@@ -109,7 +108,7 @@ func (updater *NsUpdater) worker() {
 // Creates commands to delete and add the TXT record
 func (job *NsUpdateJob) Bytes() []byte {
 	domain := job.domain + "." + dnsZone
-	buffer := bytes.NewBufferString(fmt.Sprintf("update delete %s TXT\nupdate add %s %d TXT", domain, domain, nsupdateTTL))
+	buffer := bytes.NewBufferString(fmt.Sprintf("update delete %s TXT\nupdate add %s %d TXT", domain, domain, dnsTTL))
 	chunks := SplitByLength(job.txt, dnsMaxItemLength)
 
 	for _, chunk := range chunks {
