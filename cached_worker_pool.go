@@ -82,9 +82,8 @@ func NewCachedWorkerPool(workersCount uint, workerFunc WorkerFunc, cacheConfig *
 // If a finished entry is already in the cache, it is returned
 // If a entry is already pending, it is just returned.
 // Otherwise a new entry is created and returned.
-func (proc *CachedWorkerPool) NewJob(key string) (entry *CacheEntry) {
+func (proc *CachedWorkerPool) NewJob(key string, accessed time.Time) (entry *CacheEntry) {
 	exist := false
-	now := time.Now()
 
 	proc.mutex.Lock()
 
@@ -97,7 +96,7 @@ func (proc *CachedWorkerPool) NewJob(key string) (entry *CacheEntry) {
 		entry = &CacheEntry{
 			Key:     key,
 			Pending: true,
-			Created: now,
+			Created: accessed,
 		}
 		entry.wait.Add(1)
 		proc.cache[key] = entry
@@ -108,8 +107,10 @@ func (proc *CachedWorkerPool) NewJob(key string) (entry *CacheEntry) {
 	// Update access attributes
 	// This is outside of the critical section,
 	// but race conditions do not cause any trouble.
-	entry.Accessed = now
 	entry.Hits += 1
+	if entry.Accessed.Before(accessed) {
+		entry.Accessed = accessed
+	}
 
 	if !exist {
 		proc.workers.Add(entry)

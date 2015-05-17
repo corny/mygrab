@@ -4,6 +4,7 @@ import (
 	"github.com/miekg/dns"
 	"log"
 	"net"
+	"time"
 )
 
 var (
@@ -21,7 +22,7 @@ func NewMxProcessor(workersCount uint, cacheConfig *CacheConfig) *MxProcessor {
 }
 
 func (proc *MxProcessor) NewJob(hostname string) *CacheEntry {
-	return proc.cache.NewJob(hostname)
+	return proc.cache.NewJob(hostname, time.Now())
 }
 
 // If the hostname exists in the cache it returns its Value.
@@ -56,9 +57,10 @@ func (proc *MxProcessor) work(obj interface{}) {
 	jobs := make([]*CacheEntry, len(addresses))
 	hosts := make([]*MxHostSummary, len(addresses))
 
-	// Do the host checks
+	// Run the host checks
 	for i, addr := range addresses {
-		jobs[i] = hostProcessor.NewJob(net.ParseIP(addr))
+		// Pass the access time from the host entry
+		jobs[i] = hostProcessor.NewJobWithAccessTime(net.ParseIP(addr), entry.Accessed)
 	}
 
 	// Wait for the host checks to be finished
