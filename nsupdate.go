@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	nsupdateBatchSize     = 500
-	nsupdateMaxItemLength = 255
+	nsupdateBatchSize = 500
+	dnsMaxItemLength  = 255
 )
 
 var (
@@ -109,24 +109,12 @@ func (updater *NsUpdater) worker() {
 // Creates commands to delete and add the TXT record
 func (job *NsUpdateJob) Bytes() []byte {
 	domain := job.domain + "." + dnsZone
-	length := len(job.txt)
-	chunks := length / nsupdateMaxItemLength
 	buffer := bytes.NewBufferString(fmt.Sprintf("update delete %s TXT\nupdate add %s %d TXT", domain, domain, nsupdateTTL))
+	chunks := SplitByLength(job.txt, dnsMaxItemLength)
 
-	// we need at least one chunk
-	if chunks == 0 {
-		chunks = 1
-	}
-
-	// Long data must be splittet into multiple chunks
-	for i := 0; i < chunks; i++ {
+	for _, chunk := range chunks {
 		buffer.WriteString(" \"")
-		if i == chunks-1 {
-			// the last chunk, there is no maximum function for two integers in Go
-			buffer.Write([]byte(job.txt[i*nsupdateMaxItemLength:]))
-		} else {
-			buffer.Write([]byte(job.txt[i*nsupdateMaxItemLength : (nsupdateMaxItemLength * (i + 1))]))
-		}
+		buffer.WriteString(chunk)
 		buffer.WriteString("\"")
 	}
 

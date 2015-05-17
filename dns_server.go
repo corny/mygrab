@@ -59,8 +59,8 @@ func (dnsServer *DnsServer) handle(w dns.ResponseWriter, r *dns.Msg) {
 			Class:  dns.ClassINET,
 			Ttl:    600,
 		}
+		t.Txt = SplitByLength(*response, dnsMaxItemLength)
 
-		t.Txt = []string{*response}
 		msg.Answer = append(msg.Answer, t)
 	} else {
 		// No answer available

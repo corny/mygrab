@@ -5,6 +5,35 @@ import (
 	"testing"
 )
 
+func TestSplitByLength(t *testing.T) {
+	var arr []string
+
+	arr = SplitByLength("", 3)
+	if len(arr) != 0 {
+		t.Fatal("unexpected value:", arr)
+	}
+
+	arr = SplitByLength("foobar", 3)
+	if len(arr) != 2 || arr[0] != "foo" || arr[1] != "bar" {
+		t.Fatal("unexpected value:", arr)
+	}
+
+	arr = SplitByLength("foobar", 4)
+	if len(arr) != 2 || arr[0] != "foob" || arr[1] != "ar" {
+		t.Fatal("unexpected value:", arr)
+	}
+
+	arr = SplitByLength("foobar", 6)
+	if len(arr) != 1 || arr[0] != "foobar" {
+		t.Fatal("unexpected value:", arr)
+	}
+
+	arr = SplitByLength("foobar", 7)
+	if len(arr) != 1 || arr[0] != "foobar" {
+		t.Fatal("unexpected value:", arr)
+	}
+}
+
 func TestJoinStringSet(t *testing.T) {
 
 	slice := []interface{}{"foo", "bar"}

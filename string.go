@@ -23,6 +23,27 @@ func UniqueStrings(list []string) []string {
 	return result
 }
 
+func SplitByLength(input string, chunkSize int) []string {
+	length := len(input)
+	chunkCount := length / chunkSize
+
+	if length%chunkSize > 0 {
+		chunkCount += 1
+	}
+
+	chunks := make([]string, chunkCount)
+
+	for i := 0; i < chunkCount; i++ {
+		if i == chunkCount-1 {
+			chunks[i] = input[i*chunkSize:]
+		} else {
+			chunks[i] = input[i*chunkSize : (i+1)*chunkSize]
+		}
+	}
+
+	return chunks
+}
+
 // creates a comma seperated sorted list
 func joinSet(set mapset.Set, hexEncode bool) string {
 	buffer := new(bytes.Buffer)
