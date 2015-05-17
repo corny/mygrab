@@ -29,18 +29,18 @@ func TestTxtStarttls(t *testing.T) {
 	check(false, []*MxHostSummary{&MxHostSummary{}})
 
 	// starttls == false
-	check(false, []*MxHostSummary{&MxHostSummary{starttls: &False}})
+	check(false, []*MxHostSummary{&MxHostSummary{Starttls: &False}})
 
 	// starttls == true
-	check(true, []*MxHostSummary{&MxHostSummary{starttls: &True}})
+	check(true, []*MxHostSummary{&MxHostSummary{Starttls: &True}})
 
 	// first:  starttls == true
 	// second: unreachable
-	check(true, []*MxHostSummary{&MxHostSummary{starttls: &True}, &MxHostSummary{}})
+	check(true, []*MxHostSummary{&MxHostSummary{Starttls: &True}, &MxHostSummary{}})
 
 	// first:  starttls == true
 	// second: starttls == false
-	check(false, []*MxHostSummary{&MxHostSummary{starttls: &True}, &MxHostSummary{starttls: &False}})
+	check(false, []*MxHostSummary{&MxHostSummary{Starttls: &True}, &MxHostSummary{Starttls: &False}})
 }
 
 func TestTxtWithCertificate(t *testing.T) {
@@ -50,9 +50,9 @@ func TestTxtWithCertificate(t *testing.T) {
 
 	fingerprintA := [][]byte{[]byte("foo")}
 	fingerprintB := [][]byte{[]byte("bar")}
-	hostA := &MxHostSummary{starttls: &True, tlsVersions: tlsVersions, tlsCipherSuites: tlsCiphers, fingerprints: fingerprintA, certificates: certs}
-	hostB := &MxHostSummary{starttls: &True, tlsVersions: tlsVersions, tlsCipherSuites: tlsCiphers, fingerprints: fingerprintA, certificates: certs}
-	hostC := &MxHostSummary{starttls: &True, tlsVersions: tlsVersions, tlsCipherSuites: tlsCiphers, fingerprints: fingerprintB, certificates: certs}
+	hostA := &MxHostSummary{Starttls: &True, tlsVersions: tlsVersions, tlsCipherSuites: tlsCiphers, fingerprints: fingerprintA, certificates: certs}
+	hostB := &MxHostSummary{Starttls: &True, tlsVersions: tlsVersions, tlsCipherSuites: tlsCiphers, fingerprints: fingerprintA, certificates: certs}
+	hostC := &MxHostSummary{Starttls: &True, tlsVersions: tlsVersions, tlsCipherSuites: tlsCiphers, fingerprints: fingerprintB, certificates: certs}
 
 	txtRecord := createTxtRecord("", []*MxHostSummary{hostA, hostB, hostC})
 	str := txtRecord.String()

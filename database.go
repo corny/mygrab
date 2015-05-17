@@ -191,7 +191,7 @@ func saveMxHostSummary(result *MxHostSummary) {
 
 	params := []interface{}{
 		result.Error,
-		result.starttls,
+		result.Starttls,
 		ByteaArray(setToByteArrays(result.tlsVersions)),
 		ByteaArray(setToByteArrays(result.tlsCipherSuites)),
 		result.ServerFingerprint(),
@@ -200,7 +200,7 @@ func saveMxHostSummary(result *MxHostSummary) {
 		result.ecdheCurveType,
 		result.ecdheCurveId,
 		result.ecdheKeyLength,
-		result.UpdatedAt,
+		result.Updated,
 		address,
 	}
 

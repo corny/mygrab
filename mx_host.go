@@ -13,9 +13,9 @@ import (
 
 // Summarizes the results of multiple connections to a single host
 type MxHostSummary struct {
-	address         net.IP
-	UpdatedAt       time.Time
-	starttls        *bool
+	address         net.IP    `json:"-"`
+	Updated         time.Time `json:"updated"`
+	Starttls        *bool     `json:"starttls"`
 	tlsVersions     mapset.Set
 	tlsCipherSuites mapset.Set
 	certificates    []*x509.Certificate
@@ -23,7 +23,7 @@ type MxHostSummary struct {
 	ecdheCurveType  *byte
 	ecdheCurveId    *ztls.CurveID
 	ecdheKeyLength  *int
-	Error           *string // only the first error
+	Error           *string `json:"error"` // only the first error
 }
 
 // The result of a single connection attempt using zlib.Grab
@@ -39,18 +39,18 @@ type MxHostGrab struct {
 // Summry of multiple connection attemps to a single host
 func NewMxHostSummary(address net.IP) *MxHostSummary {
 	result := &MxHostSummary{
-		address:   address,
-		UpdatedAt: time.Now().UTC(),
+		address: address,
+		Updated: time.Now().UTC(),
 	}
 
 	// The first connection attempt with up to TLS 1.2
 	grab := NewMxHostGrab(address, ztls.VersionTLS12)
 
-	result.starttls = grab.starttls
+	result.Starttls = grab.starttls
 	result.Error = grab.Error
 
 	// Was the TLS handshake successful?
-	if result.starttls != nil && *result.starttls {
+	if result.Starttls != nil && *result.Starttls {
 		result.Append(grab)
 
 		// Try TLS 1.0 as well if we just had a higher version

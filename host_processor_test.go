@@ -14,8 +14,8 @@ func TestHostConcurrency(t *testing.T) {
 	processor.NewJob(targetA)
 	processor.NewJob(targetB)
 
-	if processor.cache.cacheHits != 1 {
-		t.Fatal("invalid concurrent Hits: ", processor.cache.cacheHits)
+	if processor.cache.CacheHits != 1 {
+		t.Fatal("invalid concurrent Hits: ", processor.cache.CacheHits)
 	}
 
 	length := len(processor.cache.workers.channel)
@@ -30,20 +30,20 @@ func TestHostCache(t *testing.T) {
 	targetB := net.ParseIP("127.0.0.1")
 
 	processor.NewJob(targetA)
-	processor.Close()
 
-	if processor.cache.cacheMisses != 1 {
-		t.Fatal("invalid cache misses: ", processor.cache.cacheMisses)
+	if processor.cache.CacheMisses != 1 {
+		t.Fatal("invalid cache misses: ", processor.cache.CacheMisses)
 	}
 
 	processor.NewJob(targetB)
 
-	if processor.cache.cacheHits != 1 {
-		t.Fatal("invalid cache Hits: ", processor.cache.cacheHits)
+	if processor.cache.CacheHits != 1 {
+		t.Fatal("invalid cache Hits: ", processor.cache.CacheHits)
 	}
-	if processor.cache.cacheMisses != 1 {
-		t.Fatal("invalid cache misses: ", processor.cache.cacheMisses)
+	if processor.cache.CacheMisses != 1 {
+		t.Fatal("invalid cache misses: ", processor.cache.CacheMisses)
 	}
+	processor.Close()
 }
 
 func TestLruCache(t *testing.T) {

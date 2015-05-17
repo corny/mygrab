@@ -18,10 +18,8 @@ func status() ([]byte, error) {
 	cacheStatus := func(pool *CachedWorkerPool) map[string]interface{} {
 		c := make(map[string]interface{})
 		c["entries"] = len(pool.cache)
-		c["hits"] = pool.cacheHits
-		c["misses"] = pool.cacheMisses
-		c["expiries"] = pool.cacheExpiries
-		c["refreshes"] = pool.cacheRefreshes
+		c["stats"] = pool
+		c["config"] = pool.cacheConfig
 		m := poolStatus(pool.workers)
 		m["cache"] = c
 		return m

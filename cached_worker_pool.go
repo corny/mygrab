@@ -6,9 +6,9 @@ import (
 )
 
 type CacheConfig struct {
-	expireAfter   time.Duration
-	refreshAfter  time.Duration
-	checkInterval time.Duration
+	ExpireAfter   time.Duration
+	RefreshAfter  time.Duration
+	CheckInterval time.Duration
 }
 
 type CacheEntry struct {
@@ -35,10 +35,13 @@ type CachedWorkerPool struct {
 	cacheConfig  *CacheConfig
 
 	// Statistics
-	cacheHits      uint64
-	cacheMisses    uint64
-	cacheRefreshes uint64
-	cacheExpiries  uint64
+	CacheHits      uint64 `json:"hits"`
+	CacheMisses    uint64 `json:"misses"`
+	CacheRefreshes uint64 `json:"refreshes"`
+	CacheExpiries  uint64 `json:"expiries"`
+
+	CacheWorkerStarted time.Time `json:"worker_started"`
+	CacheWorkerStopped time.Time `json:"worker_stopped"`
 
 	// mutex for the cache
 	mutex sync.Mutex
@@ -53,9 +56,9 @@ func NewCacheConfig(expireAfter uint, refreshAfter uint, checkInterval uint) *Ca
 		panic("expireAfter must not be zero")
 	}
 	return &CacheConfig{
-		expireAfter:   time.Duration(expireAfter) * time.Second,
-		refreshAfter:  time.Duration(refreshAfter) * time.Second,
-		checkInterval: time.Duration(checkInterval) * time.Second,
+		ExpireAfter:   time.Duration(expireAfter) * time.Second,
+		RefreshAfter:  time.Duration(refreshAfter) * time.Second,
+		CheckInterval: time.Duration(checkInterval) * time.Second,
 	}
 }
 
@@ -89,9 +92,9 @@ func (proc *CachedWorkerPool) NewJob(key string, accessed time.Time) (entry *Cac
 
 	// Does the address exist in the cache?
 	if entry, exist = proc.cache[key]; exist {
-		proc.cacheHits += 1
+		proc.CacheHits += 1
 	} else {
-		proc.cacheMisses += 1
+		proc.CacheMisses += 1
 		// Add to cache
 		entry = &CacheEntry{
 			Key:     key,
@@ -157,11 +160,11 @@ func (proc *CachedWorkerPool) work(item interface{}) {
 }
 
 func (config *CacheConfig) shouldExpire(accessed time.Time) bool {
-	return time.Since(accessed) > config.expireAfter
+	return time.Since(accessed) > config.ExpireAfter
 }
 
 func (config *CacheConfig) shouldRefresh(refreshed time.Time) bool {
-	return config.refreshAfter > 0 && time.Since(refreshed) > config.refreshAfter
+	return config.RefreshAfter > 0 && time.Since(refreshed) > config.RefreshAfter
 }
 
 // Periodically checks the cache and expires oder enqueues entries.
@@ -169,13 +172,14 @@ func (proc *CachedWorkerPool) cacheWorker() {
 	for range proc.cacheChannel {
 		enqueue := make([]*CacheEntry, 0)
 
+		proc.CacheWorkerStarted = time.Now()
 		proc.mutex.Lock()
 		for key, entry := range proc.cache {
 			if !entry.Pending {
 				if proc.cacheConfig.shouldExpire(entry.Accessed) {
 					// expire the entry
 					delete(proc.cache, key)
-					proc.cacheExpiries++
+					proc.CacheExpiries++
 				} else if proc.cacheConfig.shouldRefresh(entry.Refreshed) {
 					// enqueue the entry
 					entry.Pending = true
@@ -185,9 +189,10 @@ func (proc *CachedWorkerPool) cacheWorker() {
 			}
 		}
 		proc.mutex.Unlock()
+		proc.CacheWorkerStopped = time.Now()
 
 		// Update refreshes counter
-		proc.cacheRefreshes += uint64(len(enqueue))
+		proc.CacheRefreshes += uint64(len(enqueue))
 
 		// Enqueue new entrys
 		// this is a blocking operation and must not be in a locked section
@@ -196,7 +201,7 @@ func (proc *CachedWorkerPool) cacheWorker() {
 		}
 
 		// sleep and initiate the next run
-		time.Sleep(proc.cacheConfig.checkInterval)
+		time.Sleep(proc.cacheConfig.CheckInterval)
 		proc.cacheChannel <- true
 	}
 }
