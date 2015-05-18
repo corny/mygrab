@@ -3,15 +3,30 @@ package main
 import (
 	"github.com/miekg/dns"
 	"log"
+	"strings"
 )
 
 type DnsServer struct {
 	server dns.Server
+	zone   string
 }
 
 // Creates a new DNS server
-func NewDnsServer() *DnsServer {
+func NewDnsServer(zone string) *DnsServer {
+	// Append dot to zone if missing
+	if !strings.HasSuffix(zone, ".") {
+		zone = zone + "."
+	}
+
+	log.Println("Starting DNS server with zone " + zone)
+
+	// Prepend dot to zone if missing
+	if !strings.HasPrefix(zone, ".") {
+		zone = "." + zone
+	}
+
 	server := &DnsServer{
+		zone: zone,
 		server: dns.Server{
 			Addr: ":5533",
 			Net:  "udp",
@@ -37,22 +52,23 @@ func (dnsServer *DnsServer) Close() error {
 
 // Handles a DNS message
 func (dnsServer *DnsServer) handle(w dns.ResponseWriter, r *dns.Msg) {
-	var response *string
 	name := r.Question[0].Name
-	domainLen := len(name) - len(dnsZone)
-	if len(dnsZone) > 1 {
-		domainLen -= 1 // remove ending dot
+
+	// Wrong zone?
+	if !strings.HasSuffix(name, dnsServer.zone) {
+		m := new(dns.Msg)
+		m.SetRcode(r, dns.RcodeServerFailure)
+		w.WriteMsg(m)
+		return
 	}
 
-	if domainLen > 0 {
-		// cut off the upper zone
-		response = mxProcessor.GetValue(name[:domainLen])
-	}
+	// Cut off the zone and retrieve the TXT record
+	response := mxProcessor.GetValue(name[:len(name)-len(dnsServer.zone)])
 
 	if response == nil {
-		// Do not send any answers at this place
-		// The client should resend its message an we will then
-		// hopefully have the answer.
+		// Do not send any answers at this place.
+		// The client should resend its message and
+		// then we will hopefully have the answer.
 		return
 	}
 

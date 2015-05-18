@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
-	"strings"
 	"syscall"
 	"time"
 )
@@ -152,11 +151,6 @@ func main() {
 		nsUpdater = NewNsUpdater()
 	}
 
-	// Append dot to dnsZone if missing
-	if !strings.HasSuffix(dnsZone, ".") {
-		dnsZone = dnsZone + "."
-	}
-
 	// Configure caching
 	if dnsServerEnabled {
 		hostCacheEnabled = true
@@ -197,8 +191,10 @@ func main() {
 	// Start control socket handler
 	go controlSocket()
 
-	// Start the DNS server
-	dnsServer = NewDnsServer()
+	if dnsServerEnabled {
+		// Start the DNS server
+		dnsServer = NewDnsServer(dnsZone)
+	}
 
 	var err error
 
