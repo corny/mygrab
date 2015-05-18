@@ -13,6 +13,7 @@ type TxtRecord struct {
 	certProblems mapset.Set // the union of all hosts
 	tlsVersions  mapset.Set // the intersection of all hosts
 	tlsCiphers   mapset.Set // the intersection of all hosts
+	trusted      mapset.Set // the intersection of all hosts: list of root stores with a valid chain
 	updatedAt    int64
 }
 
@@ -47,17 +48,22 @@ func createTxtRecord(hostname string, hosts []*MxHostSummary) (record TxtRecord)
 
 	record.fingerprints = mapset.NewThreadUnsafeSet()
 	record.certProblems = mapset.NewThreadUnsafeSet()
+	record.trusted = mapset.NewThreadUnsafeSet()
 
 	for _, host := range hosts {
 		if host.tlsVersions != nil {
+			validity := host.validity
+
 			if record.tlsVersions == nil {
 				// Just copy, it's the first one
 				record.tlsVersions = host.tlsVersions
 				record.tlsCiphers = host.tlsCipherSuites
+				record.trusted = validity.TrustedNames()
 			} else {
 				// Calculate the intersection
 				record.tlsVersions = record.tlsVersions.Intersect(host.tlsVersions)
 				record.tlsCiphers = record.tlsCiphers.Intersect(host.tlsCipherSuites)
+				record.trusted = record.trusted.Intersect(validity.TrustedNames())
 			}
 
 			// Has the server certificate been parsed successfully?
@@ -67,7 +73,7 @@ func createTxtRecord(hostname string, hosts []*MxHostSummary) (record TxtRecord)
 				if !host.CertificateValidForDomain(hostname) {
 					record.certProblems.Add("mismatch")
 				}
-				if *host.CertificateExpired() {
+				if validity.Expired {
 					record.certProblems.Add("expired")
 				}
 			}
@@ -113,6 +119,10 @@ func (record *TxtRecord) String() string {
 
 		if record.fingerprints.Cardinality() > 0 {
 			addValue("fingerprints", joinSet(record.fingerprints, true))
+		}
+
+		if record.trusted.Cardinality() > 0 {
+			addValue("trusted", joinSet(record.trusted, false))
 		}
 
 		if record.certProblems.Cardinality() > 0 {

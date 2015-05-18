@@ -151,6 +151,7 @@ func saveCertificate(cert *x509.Certificate) {
 		pubkey := string(x509.SHA1Fingerprint(cert.RawSubjectPublicKeyInfo))
 		signatureAlgorithm := cert.SignatureAlgorithmName()
 		publicKeyAlgorithm := cert.PublicKeyAlgorithmName()
+		selfSigned := cert.Subject.CommonName == cert.Issuer.CommonName
 
 		// Key length
 		var pubkeySize *int
@@ -160,15 +161,8 @@ func saveCertificate(cert *x509.Certificate) {
 			pubkeySize = &len
 		}
 
-		// Certificate validation error
-		var validationError *string
-		if cert.ValidationError() != nil {
-			err := cert.ValidationError().Error()
-			validationError = &err
-		}
-
-		_, err = dbconn.Exec("INSERT INTO certificates (id, subject_id, issuer_id, key_id, key_size, signature_algorithm, key_algorithm, is_valid, validation_error, is_self_signed, is_ca, first_seen_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, NOW())",
-			sha1sum, subject, issuer, pubkey, pubkeySize, signatureAlgorithm, publicKeyAlgorithm, cert.Valid(), validationError, subject == issuer, cert.IsCA)
+		_, err = dbconn.Exec("INSERT INTO certificates (id, subject_id, issuer_id, key_id, key_size, signature_algorithm, key_algorithm, is_self_signed, is_ca, first_seen_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, NOW())",
+			sha1sum, subject, issuer, pubkey, pubkeySize, signatureAlgorithm, publicKeyAlgorithm, selfSigned, cert.IsCA)
 		if err != nil {
 			log.Panicln(err, sha1hex)
 		}
@@ -189,6 +183,21 @@ func saveMxHostSummary(result *MxHostSummary) {
 	var id int
 	err := dbconn.QueryRow("SELECT id FROM mx_hosts WHERE address = $1", address).Scan(&id)
 
+	var certTrusted *bool
+	var certExpired *bool
+	var certError *string
+
+	// certificate validity
+	if v := result.validity; v != nil {
+		trusted := len(v.TrustedChains) > 0
+		certTrusted = &trusted
+		certExpired = &v.Expired
+		if e := v.Error; e != nil {
+			str := e.Error()
+			certError = &str
+		}
+	}
+
 	params := []interface{}{
 		result.Error,
 		result.Starttls,
@@ -196,10 +205,11 @@ func saveMxHostSummary(result *MxHostSummary) {
 		ByteaArray(setToByteArrays(result.tlsCipherSuites)),
 		result.ServerFingerprint(),
 		ByteaArray(result.CaFingerprints()),
-		result.CertificateExpired(),
+		certExpired,
+		certTrusted,
+		certError,
 		result.ecdheCurveType,
 		result.ecdheCurveId,
-		result.ecdheKeyLength,
 		result.Updated,
 		address,
 	}
@@ -207,12 +217,12 @@ func saveMxHostSummary(result *MxHostSummary) {
 	switch err {
 	case sql.ErrNoRows:
 		// not yet present
-		_, err := dbconn.Exec("INSERT INTO mx_hosts (error, starttls, tls_versions, tls_cipher_suites, certificate_id, ca_certificate_ids, cert_expired, ecdhe_curve_type, ecdhe_curve_id, ecdhe_key_size, updated_at, address) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)", params...)
+		_, err := dbconn.Exec("INSERT INTO mx_hosts (error, starttls, tls_versions, tls_cipher_suites, certificate_id, ca_certificate_ids, cert_expired, cert_trusted, cert_error, ecdhe_curve_type, ecdhe_curve_id, updated_at, address) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)", params...)
 		if err != nil {
 			log.Panicln(err)
 		}
 	case nil:
-		_, err := dbconn.Exec("UPDATE mx_hosts SET error=$1, starttls=$2, tls_versions=$3, tls_cipher_suites=$4, certificate_id=$5, ca_certificate_ids=$6, cert_expired=$7, ecdhe_curve_type=$8, ecdhe_curve_id=$9, ecdhe_key_size=$10, updated_at=$11 WHERE address = $12", params...)
+		_, err := dbconn.Exec("UPDATE mx_hosts SET error=$1, starttls=$2, tls_versions=$3, tls_cipher_suites=$4, certificate_id=$5, ca_certificate_ids=$6, cert_expired=$7, cert_trusted=$8, cert_error=$9, ecdhe_curve_type=$10, ecdhe_curve_id=$11, updated_at=$12 WHERE address = $13", params...)
 		if err != nil {
 			log.Panicln(err)
 		}

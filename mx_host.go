@@ -20,6 +20,7 @@ type MxHostSummary struct {
 	tlsCipherSuites mapset.Set
 	certificates    []*x509.Certificate
 	fingerprints    [][]byte
+	validity        *CertificateValidity
 	ecdheCurveType  *byte
 	ecdheCurveId    *ztls.CurveID
 	ecdheKeyLength  *int
@@ -61,9 +62,10 @@ func NewMxHostSummary(address net.IP) *MxHostSummary {
 		}
 	}
 
-	// calculate fingerprints
+	// set fingerprints and certificate validity
 	if result.certificates != nil {
 		result.fingerprints = result.Fingerprints()
+		result.validity = NewCertificateValidity(result.certificates)
 	}
 
 	return result
@@ -130,17 +132,6 @@ func (summary *MxHostSummary) Fingerprints() [][]byte {
 	}
 
 	return fingerprints
-}
-
-// Checks if the certificate is not yet valid or expired
-func (summary *MxHostSummary) CertificateExpired() *bool {
-	if summary.certificates == nil {
-		return nil
-	}
-	cert := summary.certificates[0]
-	now := time.Now().UTC()
-	val := now.Before(cert.NotBefore) || now.After(cert.NotAfter)
-	return &val
 }
 
 func (summary *MxHostSummary) ServerFingerprint() *[]byte {
