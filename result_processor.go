@@ -24,6 +24,8 @@ func NewResultProcessor(workersCount uint) *ResultProcessor {
 			saveMxHostSummary(res)
 		case *TxtRecord:
 			saveMxDomain(res)
+		case *x509.Certificate:
+			saveCertificate(res)
 		case []*x509.Certificate:
 			for _, cert := range res {
 				saveCertificate(cert)
