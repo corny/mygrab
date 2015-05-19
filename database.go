@@ -183,19 +183,28 @@ func saveMxHostSummary(result *MxHostSummary) {
 	var id int
 	err := dbconn.QueryRow("SELECT id FROM mx_hosts WHERE address = $1", address).Scan(&id)
 
+	var rootFingerprint *[]byte
 	var certTrusted *bool
 	var certExpired *bool
 	var certError *string
 
 	// certificate validity
 	if v := result.validity; v != nil {
-		trusted := len(v.TrustedChains) > 0
-		certTrusted = &trusted
-		certExpired = &v.Expired
-		if e := v.Error; e != nil {
-			str := e.Error()
-			certError = &str
+		var trusted bool
+		if root := v.RootCertificate(); root != nil {
+			trusted = true
+			fingerprint := []byte(root.FingerprintSHA1)
+			rootFingerprint = &fingerprint
+		} else {
+			trusted = false
 		}
+		certTrusted = &trusted
+
+		// expiriation status of the server certificate
+		certExpired = &v.Expired
+
+		// Copy validation error
+		certError = v.ErrorString()
 	}
 
 	params := []interface{}{
@@ -205,6 +214,7 @@ func saveMxHostSummary(result *MxHostSummary) {
 		ByteaArray(setToByteArrays(result.tlsCipherSuites)),
 		result.ServerFingerprint(),
 		ByteaArray(result.CaFingerprints()),
+		rootFingerprint,
 		certExpired,
 		certTrusted,
 		certError,
@@ -217,12 +227,12 @@ func saveMxHostSummary(result *MxHostSummary) {
 	switch err {
 	case sql.ErrNoRows:
 		// not yet present
-		_, err := dbconn.Exec("INSERT INTO mx_hosts (error, starttls, tls_versions, tls_cipher_suites, certificate_id, ca_certificate_ids, cert_expired, cert_trusted, cert_error, ecdhe_curve_type, ecdhe_curve_id, updated_at, address) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)", params...)
+		_, err := dbconn.Exec("INSERT INTO mx_hosts (error, starttls, tls_versions, tls_cipher_suites, certificate_id, ca_certificate_ids, root_certificate_id, cert_expired, cert_trusted, cert_error, ecdhe_curve_type, ecdhe_curve_id, updated_at, address) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)", params...)
 		if err != nil {
 			log.Panicln(err)
 		}
 	case nil:
-		_, err := dbconn.Exec("UPDATE mx_hosts SET error=$1, starttls=$2, tls_versions=$3, tls_cipher_suites=$4, certificate_id=$5, ca_certificate_ids=$6, cert_expired=$7, cert_trusted=$8, cert_error=$9, ecdhe_curve_type=$10, ecdhe_curve_id=$11, updated_at=$12 WHERE address = $13", params...)
+		_, err := dbconn.Exec("UPDATE mx_hosts SET error=$1, starttls=$2, tls_versions=$3, tls_cipher_suites=$4, certificate_id=$5, ca_certificate_ids=$6, root_certificate_id=$7, cert_expired=$8, cert_trusted=$9, cert_error=$10, ecdhe_curve_type=$11, ecdhe_curve_id=$12, updated_at=$13 WHERE address = $14", params...)
 		if err != nil {
 			log.Panicln(err)
 		}

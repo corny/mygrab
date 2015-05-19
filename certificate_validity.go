@@ -25,6 +25,7 @@ func NewCertificateValidity(certs []*x509.Certificate) *CertificateValidity {
 	opts := x509.VerifyOptions{
 		CurrentTime:   time.Now(),
 		Intermediates: x509.NewCertPool(),
+		Roots:         x509.SystemRootsPool(),
 	}
 
 	for i, cert := range certs {
@@ -55,7 +56,7 @@ func NewCertificateValidity(certs []*x509.Certificate) *CertificateValidity {
 	keyUsages := []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
 	chains := x509.FilterChainsByKeyUsage(candidateChains, keyUsages)
 
-	// Any chains left?
+	// Any valid chains left?
 	if len(chains) == 0 {
 		v.Error = x509.CertificateInvalidError{leaf, x509.IncompatibleUsage}
 	}
@@ -74,4 +75,20 @@ func (v *CertificateValidity) TrustedNames() mapset.Set {
 		set.Add(key)
 	}
 	return set
+}
+
+// Root certificate of the first trusted chain
+func (v *CertificateValidity) RootCertificate() *x509.Certificate {
+	for _, chain := range v.TrustedChains {
+		return chain[len(chain)-1]
+	}
+	return nil
+}
+
+func (v *CertificateValidity) ErrorString() *string {
+	if v.Error == nil {
+		return nil
+	}
+	str := v.Error.Error()
+	return &str
 }
