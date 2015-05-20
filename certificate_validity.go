@@ -59,6 +59,7 @@ func NewCertificateValidity(certs []*x509.Certificate) *CertificateValidity {
 	// Any valid chains left?
 	if len(chains) == 0 {
 		v.Error = x509.CertificateInvalidError{leaf, x509.IncompatibleUsage}
+		return v
 	}
 
 	// Set the first chain
