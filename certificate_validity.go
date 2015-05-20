@@ -86,6 +86,23 @@ func (v *CertificateValidity) RootCertificate() *x509.Certificate {
 	return nil
 }
 
+// Root certificate of the first trusted chain
+func (v *CertificateValidity) IntermediateCertificates() []*x509.Certificate {
+	for _, chain := range v.TrustedChains {
+		if len(chain) < 3 {
+			// no intermediate CAs
+			return nil
+		}
+		// Skip server and root certificate
+		certs := make([]*x509.Certificate, len(chain)-2)
+		for i, cert := range chain[1 : len(chain)-1] {
+			certs[i] = cert
+		}
+		return certs
+	}
+	return nil
+}
+
 func (v *CertificateValidity) ErrorString() *string {
 	if v.Error == nil {
 		return nil

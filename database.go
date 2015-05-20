@@ -184,6 +184,7 @@ func saveMxHostSummary(result *MxHostSummary) {
 	err := dbconn.QueryRow("SELECT id FROM mx_hosts WHERE address = $1", address).Scan(&id)
 
 	var rootFingerprint *[]byte
+	var intermediateFingerprints [][]byte
 	var certTrusted *bool
 	var certExpired *bool
 	var certError *string
@@ -198,6 +199,14 @@ func saveMxHostSummary(result *MxHostSummary) {
 		} else {
 			trusted = false
 		}
+		// Copy fingerprints of intermediate certificates
+		if intermediates := v.IntermediateCertificates(); intermediates != nil {
+			intermediateFingerprints = make([][]byte, len(intermediates))
+			for i, cert := range intermediates {
+				intermediateFingerprints[i] = []byte(cert.FingerprintSHA1)
+			}
+		}
+
 		certTrusted = &trusted
 
 		// expiriation status of the server certificate
@@ -215,6 +224,7 @@ func saveMxHostSummary(result *MxHostSummary) {
 		result.ServerFingerprint(),
 		ByteaArray(result.CaFingerprints()),
 		rootFingerprint,
+		ByteaArray(intermediateFingerprints),
 		certExpired,
 		certTrusted,
 		certError,
@@ -227,12 +237,12 @@ func saveMxHostSummary(result *MxHostSummary) {
 	switch err {
 	case sql.ErrNoRows:
 		// not yet present
-		_, err := dbconn.Exec("INSERT INTO mx_hosts (error, starttls, tls_versions, tls_cipher_suites, certificate_id, ca_certificate_ids, root_certificate_id, cert_expired, cert_trusted, cert_error, ecdhe_curve_type, ecdhe_curve_id, updated_at, address) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)", params...)
+		_, err := dbconn.Exec("INSERT INTO mx_hosts (error, starttls, tls_versions, tls_cipher_suites, certificate_id, ca_certificate_ids, chain_root_id, chain_intermediate_ids, cert_expired, cert_trusted, cert_error, ecdhe_curve_type, ecdhe_curve_id, updated_at, address) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)", params...)
 		if err != nil {
 			log.Panicln(err)
 		}
 	case nil:
-		_, err := dbconn.Exec("UPDATE mx_hosts SET error=$1, starttls=$2, tls_versions=$3, tls_cipher_suites=$4, certificate_id=$5, ca_certificate_ids=$6, root_certificate_id=$7, cert_expired=$8, cert_trusted=$9, cert_error=$10, ecdhe_curve_type=$11, ecdhe_curve_id=$12, updated_at=$13 WHERE address = $14", params...)
+		_, err := dbconn.Exec("UPDATE mx_hosts SET error=$1, starttls=$2, tls_versions=$3, tls_cipher_suites=$4, certificate_id=$5, ca_certificate_ids=$6, chain_root_id=$7, chain_intermediate_ids=$8, cert_expired=$9, cert_trusted=$10, cert_error=$11, ecdhe_curve_type=$12, ecdhe_curve_id=$13, updated_at=$14 WHERE address = $15", params...)
 		if err != nil {
 			log.Panicln(err)
 		}
