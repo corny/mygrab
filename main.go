@@ -44,6 +44,7 @@ var (
 
 	// database settings
 	dbName string
+	dbUser string
 	dbHost = "/var/run/postgresql"
 
 	dnsProcessor    *DnsProcessor    // dns lookups
@@ -106,6 +107,7 @@ func main() {
 	flag.BoolVar(&singleWorker, "singleWorker", false, "Limit the number of workers per worker pool to one")
 	flag.StringVar(&dbName, "dbName", dbName, "Database name. If omitted, not data will be saved.")
 	flag.StringVar(&dbHost, "dbHost", dbHost, "Database host or path to unix socket")
+	flag.StringVar(&dbUser, "dbUser", dbUser, "Database user")
 	flag.Parse()
 	args := flag.Args()
 	command := args[0]
@@ -142,7 +144,7 @@ func main() {
 
 	// Configure database
 	if dbName != "" {
-		connect("dbname=" + dbName + " host=" + dbHost)
+		connect("dbname=" + dbName + " host=" + dbHost + " user=" + dbUser)
 		resultProcessor = NewResultProcessor(resultWorkers)
 	}
 
