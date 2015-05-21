@@ -152,6 +152,7 @@ func saveCertificate(cert *x509.Certificate) {
 		signatureAlgorithm := cert.SignatureAlgorithmName()
 		publicKeyAlgorithm := cert.PublicKeyAlgorithmName()
 		selfSigned := cert.Subject.CommonName == cert.Issuer.CommonName
+		daysValid := cert.NotAfter.Sub(cert.NotBefore).Hours() / 24
 
 		// Key length
 		var pubkeySize *int
@@ -161,8 +162,8 @@ func saveCertificate(cert *x509.Certificate) {
 			pubkeySize = &len
 		}
 
-		_, err = dbconn.Exec("INSERT INTO certificates (id, subject_id, issuer_id, key_id, key_size, signature_algorithm, key_algorithm, is_self_signed, is_ca, first_seen_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, NOW())",
-			sha1sum, subject, issuer, pubkey, pubkeySize, signatureAlgorithm, publicKeyAlgorithm, selfSigned, cert.IsCA)
+		_, err = dbconn.Exec("INSERT INTO certificates (id, subject_id, issuer_id, key_id, key_size, signature_algorithm, key_algorithm, is_self_signed, is_ca, days_valid, first_seen_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, ROUND($10), NOW())",
+			sha1sum, subject, issuer, pubkey, pubkeySize, signatureAlgorithm, publicKeyAlgorithm, selfSigned, cert.IsCA, daysValid)
 		if err != nil {
 			log.Panicln(err, sha1hex)
 		}
