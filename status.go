@@ -10,6 +10,7 @@ func status() ([]byte, error) {
 		m := make(map[string]interface{})
 		m["pending"] = len(pool.channel)
 		m["processed"] = pool.processed
+		m["per_minute"] = pool.JobsPerMinute()
 		m["workers_current"] = pool.currentWorkers
 		m["workers_max"] = pool.maxWorkers
 		return m
