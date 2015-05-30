@@ -2,6 +2,7 @@ package main
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -16,8 +17,9 @@ type WorkerPool struct {
 	// channel for pending jobs
 	channel chan interface{}
 
-	// Number of processed jobs
-	processed uint64
+	// Number of processed and processing jobs
+	processed  uint64
+	processing uint32
 
 	// Recently processed jobs per second
 	statsValues []int
@@ -30,14 +32,14 @@ type WorkerPool struct {
 	work WorkerFunc
 
 	// Size of the worker pool
-	maxWorkers     uint
-	currentWorkers uint
+	maxWorkers     uint32
+	currentWorkers uint32
 }
 
 func NewWorkerPool(maxWorkers uint, work WorkerFunc) *WorkerPool {
 	proc := &WorkerPool{work: work}
 	proc.channel = make(chan interface{}, 100)
-	proc.maxWorkers = maxWorkers
+	proc.maxWorkers = uint32(maxWorkers)
 
 	// Statistical stuff
 	proc.statsValues = make([]int, maxStatsCount)
@@ -49,13 +51,15 @@ func NewWorkerPool(maxWorkers uint, work WorkerFunc) *WorkerPool {
 
 func (proc *WorkerPool) worker() {
 	for obj := range proc.channel {
+		atomic.AddUint32(&proc.processing, 1)
 		proc.work(obj)
-		proc.processed += 1 // not atomic
+		atomic.AddUint32(&proc.processing, ^uint32(0)) // decrement
+		atomic.AddUint64(&proc.processed, 1)
 	}
 	proc.wg.Done()
 }
 
-// Saves the delta of processed jobs per seconds
+// Saves the delta of processed jobs per second
 func (proc *WorkerPool) statsWorker() {
 	var previous uint64
 	var current uint64
@@ -72,7 +76,7 @@ func (proc *WorkerPool) statsWorker() {
 func (proc *WorkerPool) Add(obj interface{}) {
 	if proc.currentWorkers == 0 || (len(proc.channel) > 0 && proc.maxWorkers > proc.currentWorkers) {
 		// Start another worker
-		proc.currentWorkers++ // not atomic, not crucial
+		atomic.AddUint32(&proc.currentWorkers, 1)
 		proc.wg.Add(1)
 		go proc.worker()
 	}

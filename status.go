@@ -10,13 +10,14 @@ func status() ([]byte, error) {
 		m := make(map[string]interface{})
 		m["pending"] = len(pool.channel)
 		m["processed"] = pool.processed
+		m["processing"] = pool.processing
 		m["per_minute"] = pool.JobsPerMinute()
 		m["workers_current"] = pool.currentWorkers
 		m["workers_max"] = pool.maxWorkers
 		return m
 	}
 
-	cacheStatus := func(pool *CachedWorkerPool) map[string]interface{} {
+	cachedPoolStatus := func(pool *CachedWorkerPool) map[string]interface{} {
 		c := make(map[string]interface{})
 		c["entries"] = len(pool.cache)
 		c["stats"] = pool
@@ -29,8 +30,8 @@ func status() ([]byte, error) {
 	m := make(map[string]interface{})
 	m["dns"] = poolStatus(dnsProcessor.workers)
 	m["domain"] = poolStatus(domainProcessor.workers)
-	m["host"] = cacheStatus(hostProcessor.cache)
-	m["mx"] = cacheStatus(mxProcessor.cache)
+	m["host"] = cachedPoolStatus(hostProcessor.cache)
+	m["mx"] = cachedPoolStatus(mxProcessor.cache)
 	if resultProcessor != nil {
 		m["result"] = poolStatus(resultProcessor.workers)
 	}
