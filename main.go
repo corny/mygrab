@@ -22,14 +22,14 @@ var (
 	dnsResolverTimeout uint = 10 // seconds
 	dnsTTL             uint = 600
 	dnsWorkers         uint = 500
-	dnsServerEnabled   bool
+	dnsServerEnable    bool
 	mxWorkers          uint = 250 // should at least as many as dnsWorkers
 	domainWorkers      uint = 250 // should at least as many as dnsWorkers
 	resultWorkers      uint = 2
 	unboundDebug       uint = 0
 
 	// host settings
-	hostCacheEnabled  bool
+	hostCacheEnable   bool
 	hostCacheExpires  uint = 3600
 	hostCacheRefresh  uint = 0
 	hostCacheInterval uint = 60
@@ -37,7 +37,7 @@ var (
 	hostTimeout       uint = 15
 
 	// mx cache
-	mxCacheEnabled  bool
+	mxCacheEnable   bool
 	mxCacheExpires  uint = 3600
 	mxCacheRefresh  uint = 0
 	mxCacheInterval uint = 60
@@ -71,55 +71,64 @@ func init() {
 }
 
 func main() {
+	var err error
+	var command string
 	var singleWorker bool
 
-	flag.StringVar(&zlibConfig.EHLODomain, "ehlo", zlibConfig.EHLODomain, "Send an EHLO with the specified domain (implies --smtp)")
-	flag.StringVar(&dnsResolver, "dnsResolver", dnsResolver, "DNS resolver address")
-	flag.UintVar(&dnsResolverTimeout, "dnsResolverTimeout", dnsResolverTimeout, "DNS timeout in seconds")
-	flag.StringVar(&dnsZone, "dnsZone", dnsZone, "The zone for nsupdate and the internal DNS server. 'example.com' will serve a TXT record for some-domain.com at 'some-domain.com.example.com'.")
-	flag.UintVar(&dnsTTL, "dnsTTL", dnsTTL, "TTL for DNS dns records")
-	flag.BoolVar(&dnsServerEnabled, "dnsServerEnabled", dnsServerEnabled, "Enable the internal dns server")
+	flags := flag.NewFlagSet("default", flag.ContinueOnError)
+
+	flags.StringVar(&zlibConfig.EHLODomain, "ehlo", zlibConfig.EHLODomain, "Send an EHLO with the specified domain (implies --smtp)")
+	flags.StringVar(&dnsResolver, "dnsResolver", dnsResolver, "DNS resolver address")
+	flags.UintVar(&dnsResolverTimeout, "dnsResolverTimeout", dnsResolverTimeout, "DNS timeout in seconds")
+	flags.StringVar(&dnsZone, "dnsZone", dnsZone, "The zone for nsupdate and the internal DNS server. 'example.com' will serve a TXT record for some-domain.com at 'some-domain.com.example.com'.")
+	flags.UintVar(&dnsTTL, "dnsTTL", dnsTTL, "TTL for DNS dns records")
+	flags.BoolVar(&dnsServerEnable, "dnsServerEnable", dnsServerEnable, "Enable the internal dns server")
 
 	// nsupdate
-	flag.StringVar(&nsupdateKey, "nsupdateKey", "", "path to nsupdate key. If ommited, no updates will happen.")
-	flag.StringVar(&nsupdateServer, "nsupdateServer", nsupdateServer, "dns server for nsupdate")
+	flags.StringVar(&nsupdateKey, "nsupdateKey", "", "path to nsupdate key. If ommited, no updates will happen.")
+	flags.StringVar(&nsupdateServer, "nsupdateServer", nsupdateServer, "dns server for nsupdate")
 
 	// host cache
-	flag.BoolVar(&hostCacheEnabled, "hostCacheEnabled", hostCacheEnabled, "Always true if dnsServer is enabled or command is 'import-mx'")
-	flag.UintVar(&hostCacheExpires, "hostCacheExpires", hostCacheExpires, "A host result will be removed after this number of seconds not accessed. A value of 0 disables the cache.")
-	flag.UintVar(&hostCacheRefresh, "hostCacheRefresh", hostCacheRefresh, "A host result will be refreshed after this number of seconds. A value of 0 means it will never be refreshed.")
-	flag.UintVar(&hostCacheInterval, "hostCacheInterval", hostCacheInterval, "The cache worker will sleep for this duration of seconds between runs.")
+	flags.BoolVar(&hostCacheEnable, "hostCacheEnable", hostCacheEnable, "Always true if dnsServer is enabled or command is 'import-mx'")
+	flags.UintVar(&hostCacheExpires, "hostCacheExpires", hostCacheExpires, "A host result will be removed after this number of seconds not accessed. A value of 0 disables the cache.")
+	flags.UintVar(&hostCacheRefresh, "hostCacheRefresh", hostCacheRefresh, "A host result will be refreshed after this number of seconds. A value of 0 means it will never be refreshed.")
+	flags.UintVar(&hostCacheInterval, "hostCacheInterval", hostCacheInterval, "The cache worker will sleep for this duration of seconds between runs.")
 
-	// mx/txt Cache
-	flag.BoolVar(&mxCacheEnabled, "mxCacheEnabled", mxCacheEnabled, "Always true if dnsServer is enabled or command is 'import-mx'")
-	flag.UintVar(&mxCacheExpires, "mxCacheExpires", mxCacheExpires, "A/AAAA will be removed after this number of seconds not accessed. A value of 0 disables the cache.")
-	flag.UintVar(&mxCacheRefresh, "mxCacheRefresh", mxCacheRefresh, "A mxCache result will be refreshed after this number of seconds. A value of 0 means it will never be refreshed.")
-	flag.UintVar(&mxCacheInterval, "mxCacheInterval", mxCacheInterval, "The cache worker will sleep for this duration of seconds between runs.")
+	// mx cache
+	flags.BoolVar(&mxCacheEnable, "mxCacheEnable", mxCacheEnable, "Always true if dnsServer is enabled or command is 'import-mx'")
+	flags.UintVar(&mxCacheExpires, "mxCacheExpires", mxCacheExpires, "A/AAAA will be removed after this number of seconds not accessed. A value of 0 disables the cache.")
+	flags.UintVar(&mxCacheRefresh, "mxCacheRefresh", mxCacheRefresh, "A mxCache result will be refreshed after this number of seconds. A value of 0 means it will never be refreshed.")
+	flags.UintVar(&mxCacheInterval, "mxCacheInterval", mxCacheInterval, "The cache worker will sleep for this duration of seconds between runs.")
 
-	flag.StringVar(&socketPath, "socket", "", "Read from a socket instead of stdin")
-	flag.UintVar(&dnsWorkers, "dnsWorkers", dnsWorkers, "Number of dns workers")
-	flag.UintVar(&mxWorkers, "mxWorkers", mxWorkers, "Number of mx workers")
-	flag.UintVar(&hostWorkers, "hostWorkers", hostWorkers, "Number of zgrab workers")
-	flag.UintVar(&hostTimeout, "hostTimeout", hostTimeout, "zgrab timeout in seconds")
-	flag.UintVar(&domainWorkers, "domainWorkers", domainWorkers, "Number of dns workers")
-	flag.UintVar(&resultWorkers, "resultWorkers", resultWorkers, "Number of result workers that store results in the database")
-	flag.UintVar(&unboundDebug, "unboundDebug", unboundDebug, "Debug level for libunbound")
-	flag.BoolVar(&singleWorker, "singleWorker", false, "Limit the number of workers per worker pool to one")
-	flag.StringVar(&dbName, "dbName", dbName, "Database name. If omitted, not data will be saved.")
-	flag.StringVar(&dbHost, "dbHost", dbHost, "Database host or path to unix socket")
-	flag.StringVar(&dbUser, "dbUser", dbUser, "Database user")
-	flag.Parse()
-	args := flag.Args()
-	command := args[0]
+	flags.StringVar(&socketPath, "socket", "", "Path for the control unix socket")
+	flags.UintVar(&dnsWorkers, "dnsWorkers", dnsWorkers, "Number of dns workers")
+	flags.UintVar(&mxWorkers, "mxWorkers", mxWorkers, "Number of mx workers")
+	flags.UintVar(&hostWorkers, "hostWorkers", hostWorkers, "Number of zgrab workers")
+	flags.UintVar(&hostTimeout, "hostTimeout", hostTimeout, "zgrab timeout in seconds")
+	flags.UintVar(&domainWorkers, "domainWorkers", domainWorkers, "Number of dns workers")
+	flags.UintVar(&resultWorkers, "resultWorkers", resultWorkers, "Number of result workers that store results in the database")
+	flags.UintVar(&unboundDebug, "unboundDebug", unboundDebug, "Debug level for libunbound")
+	flags.BoolVar(&singleWorker, "singleWorker", false, "Limit the number of workers per worker pool to one")
 
-	if len(args) != 1 {
+	flags.StringVar(&dbName, "dbName", dbName, "Database name. If omitted, not data will be saved.")
+	flags.StringVar(&dbHost, "dbHost", dbHost, "Database host or path to unix socket")
+	flags.StringVar(&dbUser, "dbUser", dbUser, "Database user")
+
+	err = flags.Parse(os.Args[1:])
+	args := flags.Args()
+
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "Usage: %s [options] ACTION\n\nOptions:\n", os.Args[0])
-		flag.PrintDefaults()
+		flags.PrintDefaults()
 		fmt.Fprintln(os.Stderr, "\nActions:\n")
 		fmt.Fprintln(os.Stderr, "  import-domains: Read domains from stdin for MX lookups")
 		fmt.Fprintln(os.Stderr, "  import-addresses: Read ip addresses from stdin and run host checks. Cache will be disabled.")
 		fmt.Fprintln(os.Stderr, "  resolve-mx: Read mx records from the domains table and resolve them to A/AAAA records")
+		// TODO document all commands
 		os.Exit(1)
+	}
+	if len(args) == 1 {
+		command = args[0]
 	}
 
 	if hostTimeout == 0 {
@@ -154,21 +163,21 @@ func main() {
 	}
 
 	// Configure caching
-	if dnsServerEnabled {
-		hostCacheEnabled = true
-		mxCacheEnabled = true
+	if dnsServerEnable {
+		hostCacheEnable = true
+		mxCacheEnable = true
 	}
 	var mxCache *CacheConfig
 	var hostCache *CacheConfig
 
-	if hostCacheEnabled {
+	if hostCacheEnable {
 		if hostCacheInterval == 0 {
 			log.Fatalln("hostCacheInterval must be > 0")
 		}
 		hostCache = NewCacheConfig(hostCacheExpires, hostCacheRefresh, hostCacheInterval)
 	}
 
-	if mxCacheEnabled {
+	if mxCacheEnable {
 		if mxCacheInterval == 0 {
 			log.Fatalln("mxCacheInterval must be > 0")
 		}
@@ -191,16 +200,16 @@ func main() {
 	log.Println("Using", gomaxprocs, "operating system threads")
 
 	// Start control socket handler
-	go controlSocket()
+	if socketPath != "" {
+		go controlSocket()
+	}
 
-	if dnsServerEnabled {
+	if dnsServerEnable {
 		// Start the DNS server
 		dnsServer = NewDnsServer(dnsZone)
 	}
 
-	var err error
-
-	if command == "daemon" {
+	if command == "" {
 		// Wait for SIGINT or SIGTERM
 		sigs := make(chan os.Signal, 1)
 		signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)

@@ -8,6 +8,7 @@ import (
 )
 
 func controlSocket() {
+	log.Println("Starting control socket at", socketPath)
 	os.Remove(socketPath)
 
 	l, err := net.Listen("unix", socketPath)
