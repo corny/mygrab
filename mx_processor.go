@@ -80,7 +80,7 @@ func (proc *MxProcessor) work(obj interface{}) {
 
 	// Update Nameserver
 	if nsUpdater != nil {
-		nsUpdater.Add(hostname, txtString)
+		nsUpdater.NewJob(hostname, txtString)
 	}
 
 	// Save to database

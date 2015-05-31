@@ -32,11 +32,11 @@ type DnsResult struct {
 }
 
 type DnsJob struct {
-	// waitGroup for the waiting routines
-	wait sync.WaitGroup
-
 	Query  *DnsQuery
 	Result *DnsResult
+
+	// waitGroup for the waiting routines
+	sync.WaitGroup
 }
 
 type DnsJobs struct {
@@ -49,15 +49,15 @@ type DnsProcessor struct {
 	// maps pending/running queries to jobs
 	jobs map[DnsQuery]*DnsJob
 
-	// mutex for the map
-	mutex sync.Mutex
-
 	// context for Unbound
 	unboundCtx *unbound.Unbound
 
 	// Go DNS client
 	dnsClient   dns.Client
 	dnsResolver string
+
+	// mutex for the map
+	sync.Mutex
 }
 
 func NewDnsProcessor(workersCount uint) *DnsProcessor {
@@ -73,12 +73,12 @@ func NewDnsProcessor(workersCount uint) *DnsProcessor {
 		job.Result = &result
 
 		// clean up the map
-		proc.mutex.Lock()
+		proc.Lock()
 		delete(proc.jobs, *job.Query)
-		proc.mutex.Unlock()
+		proc.Unlock()
 
 		// wake up the waiting routines
-		job.wait.Done()
+		job.Done()
 	}
 
 	proc.workers = NewWorkerPool(workersCount, work)
@@ -99,16 +99,16 @@ func (proc *DnsProcessor) NewJob(domain string, typ dns.Type) *DnsJob {
 	var job *DnsJob
 	var exist bool
 
-	proc.mutex.Lock()
+	proc.Lock()
 
 	// Is the same query already running?
 	if job, exist = proc.jobs[query]; !exist {
 		job = &DnsJob{}
 		job.Query = &query
-		job.wait.Add(1)
+		job.Add(1)
 		proc.jobs[query] = job
 	}
-	proc.mutex.Unlock()
+	proc.Unlock()
 
 	if !exist {
 		proc.workers.Add(job)
@@ -132,15 +132,10 @@ func (proc *DnsProcessor) Close() {
 	proc.workers.Close()
 }
 
-// Waits until the query is finished
-func (job *DnsJob) Wait() {
-	job.wait.Wait()
-}
-
 // Waits until all queries in this group are finished
 func (group *DnsJobs) Wait() {
 	for _, job := range group.jobs {
-		job.wait.Wait()
+		job.Wait()
 	}
 }
 

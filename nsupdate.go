@@ -27,25 +27,25 @@ type NsUpdateJob struct {
 
 type NsUpdater struct {
 	channel chan *NsUpdateJob
-	wg      sync.WaitGroup
+	sync.WaitGroup
 }
 
 func NewNsUpdater() *NsUpdater {
 	updater := &NsUpdater{}
 	updater.channel = make(chan *NsUpdateJob, nsupdateBatchSize)
-	updater.wg.Add(1)
+	updater.Add(1)
 	go updater.worker()
 	return updater
 }
 
-func (updater *NsUpdater) Add(domain string, txt string) {
+func (updater *NsUpdater) NewJob(domain string, txt string) {
 
 	updater.channel <- &NsUpdateJob{domain: domain, txt: txt}
 }
 
 func (updater *NsUpdater) Close() {
 	close(updater.channel)
-	updater.wg.Wait()
+	updater.Wait()
 }
 
 func (updater *NsUpdater) worker() {
@@ -62,7 +62,7 @@ func (updater *NsUpdater) worker() {
 		job := <-updater.channel
 		if job == nil {
 			log.Println("nsupdate: worker finished")
-			updater.wg.Done()
+			updater.Done()
 			return
 		}
 

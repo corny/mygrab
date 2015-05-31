@@ -12,9 +12,6 @@ type CacheConfig struct {
 }
 
 type CacheEntry struct {
-	// waitGroup for the waiting routines
-	wait sync.WaitGroup
-
 	Key   string      `json:"-"`
 	Value interface{} `json:"value"`
 
@@ -26,6 +23,9 @@ type CacheEntry struct {
 	Created   time.Time `json:"created"`
 	Refreshed time.Time `json:"refreshed"`
 	Accessed  time.Time `json:"accessed"`
+
+	// waitGroup for the waiting routines
+	sync.WaitGroup
 }
 
 type CachedWorkerPool struct {
@@ -43,12 +43,12 @@ type CachedWorkerPool struct {
 	CacheWorkerStarted time.Time `json:"worker_started"`
 	CacheWorkerStopped time.Time `json:"worker_stopped"`
 
-	// mutex for the cache
-	mutex sync.Mutex
-
 	// Worker Pool
 	workers    *WorkerPool
 	workerFunc WorkerFunc
+
+	// mutex for the cache
+	sync.Mutex
 }
 
 func NewCacheConfig(expireAfter uint, refreshAfter uint, checkInterval uint) *CacheConfig {
@@ -88,7 +88,7 @@ func NewCachedWorkerPool(workersCount uint, workerFunc WorkerFunc, cacheConfig *
 func (proc *CachedWorkerPool) NewJob(key string, accessed time.Time) (entry *CacheEntry) {
 	exist := false
 
-	proc.mutex.Lock()
+	proc.Lock()
 
 	// Does the address exist in the cache?
 	if entry, exist = proc.cache[key]; exist {
@@ -101,11 +101,11 @@ func (proc *CachedWorkerPool) NewJob(key string, accessed time.Time) (entry *Cac
 			Pending: true,
 			Created: accessed,
 		}
-		entry.wait.Add(1)
+		entry.Add(1)
 		proc.cache[key] = entry
 	}
 
-	proc.mutex.Unlock()
+	proc.Unlock()
 
 	// Update access attributes
 	// This is outside of the critical section,
@@ -130,11 +130,6 @@ func (proc *CachedWorkerPool) Close() {
 	proc.workers.Close()
 }
 
-// Wait until the entry is finished
-func (entry *CacheEntry) Wait() {
-	entry.wait.Wait()
-}
-
 // The worker function for a CacheEntry
 func (proc *CachedWorkerPool) work(item interface{}) {
 	entry, _ := item.(*CacheEntry)
@@ -143,7 +138,7 @@ func (proc *CachedWorkerPool) work(item interface{}) {
 	proc.workerFunc(entry)
 
 	// Lock
-	proc.mutex.Lock()
+	proc.Lock()
 
 	// Expire the entry immediately?
 	if proc.cacheConfig == nil {
@@ -151,12 +146,12 @@ func (proc *CachedWorkerPool) work(item interface{}) {
 	}
 
 	// Unlock
-	proc.mutex.Unlock()
+	proc.Unlock()
 
 	// Mark as finished and wake up waiting routines
 	entry.Refreshed = time.Now()
 	entry.Pending = false
-	entry.wait.Done()
+	entry.Done()
 }
 
 func (config *CacheConfig) shouldExpire(accessed time.Time) bool {
@@ -173,7 +168,7 @@ func (proc *CachedWorkerPool) cacheWorker() {
 		enqueue := make([]*CacheEntry, 0)
 
 		proc.CacheWorkerStarted = time.Now()
-		proc.mutex.Lock()
+		proc.Lock()
 		for key, entry := range proc.cache {
 			if !entry.Pending {
 				if proc.cacheConfig.shouldExpire(entry.Accessed) {
@@ -183,12 +178,12 @@ func (proc *CachedWorkerPool) cacheWorker() {
 				} else if proc.cacheConfig.shouldRefresh(entry.Refreshed) {
 					// enqueue the entry
 					entry.Pending = true
-					entry.wait.Add(1)
+					entry.Add(1)
 					enqueue = append(enqueue, entry)
 				}
 			}
 		}
-		proc.mutex.Unlock()
+		proc.Unlock()
 		proc.CacheWorkerStopped = time.Now()
 
 		// Update refreshes counter
