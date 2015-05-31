@@ -82,7 +82,6 @@ func NewDnsProcessor(workersCount uint) *DnsProcessor {
 	}
 
 	proc.workers = NewWorkerPool(workersCount, work)
-	proc.unboundCtx = unbound.New()
 	proc.jobs = make(map[DnsQuery]*DnsJob)
 
 	return proc
@@ -91,6 +90,17 @@ func NewDnsProcessor(workersCount uint) *DnsProcessor {
 func (proc *DnsProcessor) Configure(resolver string, timeout uint) {
 	proc.dnsClient.ReadTimeout = time.Duration(timeout) * time.Second
 	proc.dnsResolver = resolver
+}
+
+// Set up unbound
+func (proc *DnsProcessor) ConfigureUnbound(debugLevel uint, taFile string) {
+	unboundCtx := unbound.New()
+	unboundCtx.DebugLevel(int(debugLevel))
+	// Setting num-threads has not effect
+	// unboundCtx.SetOption("num-threads", string(50))
+	unboundCtx.AddTaFile(taFile)
+
+	proc.unboundCtx = unboundCtx
 }
 
 // Creates a new job
@@ -195,11 +205,11 @@ func (group *DnsJobs) Results() []string {
 // Does the lookup
 func (proc *DnsProcessor) Lookup(query *DnsQuery) (result DnsResult) {
 
-	if query.Type == TypeTLSA {
-		// Use unbound (slow) for TLSA lookups
+	if proc.unboundCtx != nil {
+		// Use unbound (slow)
 		return proc.lookupUnbound(query)
 	} else {
-		// Use go-DNS (fast) for all other lookups
+		// Use go-DNS (fast)
 		return proc.lookupDns(query)
 	}
 }

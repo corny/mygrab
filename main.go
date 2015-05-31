@@ -23,10 +23,12 @@ var (
 	dnsTTL             uint = 600
 	dnsWorkers         uint = 500
 	dnsServerEnable    bool
+	dnsUseUnbound      bool
 	mxWorkers          uint = 250 // should at least as many as dnsWorkers
 	domainWorkers      uint = 250 // should at least as many as dnsWorkers
 	resultWorkers      uint = 2
 	unboundDebug       uint = 0
+	unboundTaFile           = "/etc/unbound/root.key"
 
 	// host settings
 	hostCacheEnable   bool
@@ -83,6 +85,7 @@ func main() {
 	flags.StringVar(&dnsZone, "dnsZone", dnsZone, "The zone for nsupdate and the internal DNS server. 'example.com' will serve a TXT record for some-domain.com at 'some-domain.com.example.com'.")
 	flags.UintVar(&dnsTTL, "dnsTTL", dnsTTL, "TTL for DNS dns records")
 	flags.BoolVar(&dnsServerEnable, "dnsServerEnable", dnsServerEnable, "Enable the internal dns server")
+	flags.BoolVar(&dnsUseUnbound, "dnsUseUnbound", dnsUseUnbound, "Use libunbound as recursive resolver to get additional DNSSEC information")
 
 	// nsupdate
 	flags.StringVar(&nsupdateKey, "nsupdateKey", "", "path to nsupdate key. If ommited, no updates will happen.")
@@ -108,6 +111,7 @@ func main() {
 	flags.UintVar(&domainWorkers, "domainWorkers", domainWorkers, "Number of dns workers")
 	flags.UintVar(&resultWorkers, "resultWorkers", resultWorkers, "Number of result workers that store results in the database")
 	flags.UintVar(&unboundDebug, "unboundDebug", unboundDebug, "Debug level for libunbound")
+	flags.StringVar(&unboundTaFile, "unboundTaFile", unboundTaFile, "Trusted anchor file for libunbound")
 	flags.BoolVar(&singleWorker, "singleWorker", false, "Limit the number of workers per worker pool to one")
 
 	flags.StringVar(&dbName, "dbName", dbName, "Database name. If omitted, not data will be saved.")
@@ -190,9 +194,14 @@ func main() {
 	mxProcessor = NewMxProcessor(mxWorkers, mxCache)
 
 	// Configure DNS
-	dnsProcessor.Configure(dnsResolver, dnsResolverTimeout)
-	dnsProcessor.unboundCtx.DebugLevel(int(unboundDebug))
-	dnsProcessor.unboundCtx.SetOption("num-threads", string(50))
+	if dnsUseUnbound {
+		if _, err := os.Stat(unboundTaFile); os.IsNotExist(err) {
+			log.Fatalln("unboundTaFile", unboundTaFile, "does not exist")
+		}
+		dnsProcessor.ConfigureUnbound(unboundDebug, unboundTaFile)
+	} else {
+		dnsProcessor.Configure(dnsResolver, dnsResolverTimeout)
+	}
 
 	// Configure number of system threads
 	gomaxprocs := runtime.NumCPU()
