@@ -21,8 +21,8 @@ type TxtRecord struct {
 func createTxtRecord(hostname string, hosts []*MxHostSummary) (record TxtRecord) {
 	record.domain = hostname
 
-	// Check if all reachable hosts has StartTLS
-	starttlsFound := false
+	// Check if tls handshake to alle hosts have succeeded
+	tlsFound := false
 	for i, host := range hosts {
 		// Update Timestamp
 		updatedAt := host.Updated.Unix()
@@ -31,12 +31,15 @@ func createTxtRecord(hostname string, hosts []*MxHostSummary) (record TxtRecord)
 		}
 
 		if host.Starttls != nil {
-			if !starttlsFound {
+			if !tlsFound {
 				// set initial value
-				record.starttls = true
-				starttlsFound = true
+				tlsFound = true
+				record.starttls = *host.Starttls
 			}
-			if *host.Starttls == false {
+			// it MAY happen that STARTTLS is true
+			// but the TLS handshake is not successful.
+			// so we need to check tlsVersions
+			if *host.Starttls == false || host.tlsVersions.Cardinality() == 0 {
 				record.starttls = false
 			}
 		}
