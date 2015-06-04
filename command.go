@@ -52,6 +52,8 @@ func processCommand(command string, input *bufio.Scanner, output *bufio.Writer) 
 			}
 		}
 		output.Flush()
+	case "update-certificates":
+		updateCertificates()
 	case "resolve-mx":
 		resolveDomainMxHosts()
 	case "cache-mx":

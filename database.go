@@ -57,6 +57,26 @@ func resolveDomainMxHosts() {
 
 }
 
+func updateCertificates() {
+	rows, err := dbconn.Query("SELECT raw FROM raw_certificates")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var raw []byte
+		if err := rows.Scan(&raw); err != nil {
+			log.Fatal(err)
+		}
+		cert, err := x509.ParseCertificate(raw)
+		if err != nil {
+			log.Fatal(err)
+		}
+		saveCertificateWithUpdate(cert, true)
+	}
+}
+
 func saveDomain(job *DnsJob) {
 	result := job.Result
 	domain := job.Query.Domain
@@ -145,36 +165,58 @@ func saveCertificate(cert *x509.Certificate) {
 				log.Panic(err, sha1hex)
 			}
 		}
-
-		subject := string(x509.SHA1Fingerprint(cert.RawSubject))
-		issuer := string(x509.SHA1Fingerprint(cert.RawIssuer))
-		pubkey := string(x509.SHA1Fingerprint(cert.RawSubjectPublicKeyInfo))
-		signatureAlgorithm := cert.SignatureAlgorithmName()
-		publicKeyAlgorithm := cert.PublicKeyAlgorithmName()
-		selfSigned := cert.Subject.CommonName == cert.Issuer.CommonName
-		daysValid := cert.NotAfter.Sub(cert.NotBefore).Hours() / 24
-
-		// Key length
-		var pubkeySize *int
-		switch key := cert.PublicKey.(type) {
-		case *rsa.PublicKey:
-			len := key.N.BitLen()
-			pubkeySize = &len
-		}
-
-		_, err = dbconn.Exec("INSERT INTO certificates (id, subject_id, issuer_id, key_id, key_size, signature_algorithm, key_algorithm, is_self_signed, is_ca, days_valid, first_seen_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, ROUND($10), NOW())",
-			sha1sum, subject, issuer, pubkey, pubkeySize, signatureAlgorithm, publicKeyAlgorithm, selfSigned, cert.IsCA, daysValid)
-		if err != nil {
-			log.Panicln(err, sha1hex)
-		}
-		knownCerts.Add(sha1sum, 1)
 	case nil:
-		// already present
-		knownCerts.Add(sha1sum, 1)
 	default:
 		log.Fatal(err)
 	}
 
+	if exists {
+		knownCerts.Add(sha1sum, 1)
+	}
+
+	saveCertificateWithUpdate(cert, exists)
+}
+
+func saveCertificateWithUpdate(cert *x509.Certificate, exists bool) {
+	sha1sum := string(cert.FingerprintSHA1)
+	subject := string(x509.SHA1Fingerprint(cert.RawSubject))
+	issuer := string(x509.SHA1Fingerprint(cert.RawIssuer))
+	pubkey := string(x509.SHA1Fingerprint(cert.RawSubjectPublicKeyInfo))
+	signatureAlgorithm := cert.SignatureAlgorithmOID.String()
+	publicKeyAlgorithm := cert.PublicKeyAlgorithmName()
+	selfSigned := cert.Subject.CommonName == cert.Issuer.CommonName
+	daysValid := cert.NotAfter.Sub(cert.NotBefore).Hours() / 24
+
+	// Key length
+	var pubkeySize *int
+	switch key := cert.PublicKey.(type) {
+	case *rsa.PublicKey:
+		len := key.N.BitLen()
+		pubkeySize = &len
+	}
+
+	params := []interface{}{
+		subject,
+		issuer,
+		pubkey,
+		pubkeySize,
+		signatureAlgorithm,
+		publicKeyAlgorithm,
+		selfSigned,
+		cert.IsCA,
+		daysValid,
+		sha1sum,
+	}
+
+	var err error
+	if exists {
+		_, err = dbconn.Exec("UPDATE certificates SET subject_id=$1, issuer_id=$2, key_id=$3, key_size=$4, signature_algorithm=$5, key_algorithm=$6, is_self_signed=$7, is_ca=$8, days_valid=ROUND($9) WHERE id=$10", params...)
+	} else {
+		_, err = dbconn.Exec("INSERT INTO certificates (subject_id, issuer_id, key_id, key_size, signature_algorithm, key_algorithm, is_self_signed, is_ca, days_valid, first_seen_at, id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8, ROUND($9), NOW(), $10)", params...)
+	}
+	if err != nil {
+		log.Panicln(err, hex.EncodeToString(cert.FingerprintSHA1))
+	}
 }
 
 // Saves a MxHost in the database
