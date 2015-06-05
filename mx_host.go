@@ -111,12 +111,12 @@ func NewMxHostGrab(address net.IP, tlsVersion uint16) *MxHostGrab {
 	}
 
 	if tlsHandshake != nil {
-		// Certificates present?
+		// Certificates available?
 		if certs := tlsHandshake.ServerCertificates; certs != nil {
-			result.certificates = tlsHandshake.ServerCertificates.ParsedCertificates
+			result.certificates = certs.ParsedCertificates
 		}
 
-		// Diffie Hellman parameters present?
+		// Copy Diffie Hellman parameters
 		result.dhParams = tlsHandshake.DHParams
 	}
 
@@ -156,26 +156,28 @@ func (summary *MxHostSummary) CaFingerprints() [][]byte {
 
 // Appends a MxHostGrab to the MxHostSummary
 func (summary *MxHostSummary) Append(grab *MxHostGrab) {
-	if summary.tlsVersions == nil {
-		// the first MxHostGrab
-		summary.tlsVersions = mapset.NewThreadUnsafeSet()
-		summary.tlsCipherSuites = mapset.NewThreadUnsafeSet()
+	// Copy certificates
+	if summary.certificates == nil {
 		summary.certificates = grab.certificates
 	}
 
-	// Copy ECDHE params
-	if summary.ecdheCurveType == nil {
-		if ecdheParams, ok := grab.dhParams.(*ztls.ECDHEParams); ok {
-			summary.ecdheCurveType = &ecdheParams.CurveType
-			summary.ecdheCurveId = &ecdheParams.CurveID
-			summary.ecdheKeyLength = &ecdheParams.PublicKeyLength
-		}
-	}
-
-	// Copy TLS parameters
 	if grab.tlsVersion != 0 {
+		// Copy TLS parameters
+		if summary.tlsVersions == nil {
+			summary.tlsVersions = mapset.NewThreadUnsafeSet()
+			summary.tlsCipherSuites = mapset.NewThreadUnsafeSet()
+		}
 		summary.tlsVersions.Add(string(grab.tlsVersion.Bytes()))
 		summary.tlsCipherSuites.Add(string(grab.tlsCipherSuite.Bytes()))
+
+		// Copy ECDHE params
+		if summary.ecdheCurveType == nil {
+			if ecdheParams, ok := grab.dhParams.(*ztls.ECDHEParams); ok {
+				summary.ecdheCurveType = &ecdheParams.CurveType
+				summary.ecdheCurveId = &ecdheParams.CurveID
+				summary.ecdheKeyLength = &ecdheParams.PublicKeyLength
+			}
+		}
 	}
 }
 

@@ -36,10 +36,9 @@ func createTxtRecord(hostname string, hosts []*MxHostSummary) (record TxtRecord)
 				tlsFound = true
 				record.starttls = *host.Starttls
 			}
-			// it MAY happen that STARTTLS is true
-			// but the TLS handshake is not successful.
-			// so we need to check tlsVersions
-			if *host.Starttls == false || host.tlsVersions.Cardinality() == 0 {
+			// It MAY happen that STARTTLS is true but the TLS handshake
+			// is not successful because certificates can not be parsed.
+			if *host.Starttls == false || len(host.certificates) == 0 {
 				record.starttls = false
 			}
 		}
