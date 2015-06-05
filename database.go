@@ -58,22 +58,38 @@ func resolveDomainMxHosts() {
 }
 
 func updateCertificates() {
-	rows, err := dbconn.Query("SELECT raw FROM raw_certificates")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer rows.Close()
+	batchSize := 10000
+	i := 0
+	var id []byte
+	var raw []byte
 
-	for rows.Next() {
-		var raw []byte
-		if err := rows.Scan(&raw); err != nil {
-			log.Fatal(err)
-		}
-		cert, err := x509.ParseCertificate(raw)
+	for {
+		rows, err := dbconn.Query("SELECT id, raw FROM raw_certificates WHERE id > $1 ORDER BY id LIMIT $2", id, batchSize)
 		if err != nil {
 			log.Fatal(err)
 		}
-		saveCertificateWithUpdate(cert, true)
+		rowsFound := false
+
+		for rows.Next() {
+			if err := rows.Scan(&id, &raw); err != nil {
+				log.Fatal(err)
+			}
+			log.Println(i, hex.EncodeToString(id))
+
+			cert, err := x509.ParseCertificate(raw)
+			if err != nil {
+				log.Fatal(err)
+			}
+			saveCertificateWithUpdate(cert, true)
+
+			i += 1
+			rowsFound = true
+		}
+		rows.Close()
+
+		if !rowsFound {
+			return
+		}
 	}
 }
 
