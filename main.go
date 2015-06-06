@@ -149,10 +149,16 @@ func main() {
 		mxWorkers = 1
 	}
 
-	// disable cache if command ist import-addresses
-	// we assume that the input has not duplicates
-	if command == "import-addresses" {
+	switch command {
+	case "import-addresses":
+		// disable host cache: we assume that the input has not duplicates
 		hostCacheExpires = 0
+	case "import-mx", "resolve-mx":
+		// enable host cache: resolving mx records leads to many duplicate hosts
+		hostCacheEnable = true
+		hostCacheRefresh = 0
+		// disable mx cache: there can not be duplicate mx hostnames
+		mxCacheEnable = false
 	}
 
 	// Configure database
