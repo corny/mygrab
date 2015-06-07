@@ -46,11 +46,6 @@ func (proc *MxProcessor) work(obj interface{}) {
 	mxAddresses := dnsProcessor.NewJobs(hostname, addressTypes)
 	mxAddresses.Wait()
 
-	// Save DNS results
-	if resultProcessor != nil {
-		resultProcessor.Add(mxAddresses)
-	}
-
 	// Make addresses unique
 	addresses := UniqueStrings(mxAddresses.Results())
 
@@ -85,6 +80,6 @@ func (proc *MxProcessor) work(obj interface{}) {
 
 	// Save to database
 	if resultProcessor != nil {
-		resultProcessor.Add(&txtRecord)
+		resultProcessor.Add(&MxRecord{mxAddresses, &txtRecord})
 	}
 }

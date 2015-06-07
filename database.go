@@ -117,46 +117,6 @@ func saveDomain(job *DnsJob) {
 	}
 }
 
-func saveMxAddresses(job *DnsJob) {
-	hostname := job.Query.Domain
-
-	tx, err := dbconn.Begin()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	family := 0
-	if job.Query.Type == TypeA {
-		family = 4
-	} else {
-		family = 6
-	}
-
-	_, err = tx.Exec("DELETE FROM mx_records WHERE hostname=$1 AND family(address)=$2", hostname, family)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	for _, address := range UniqueStrings(job.Results()) {
-		_, err = tx.Exec("INSERT INTO mx_records (hostname, address, dns_secure, dns_error, dns_bogus) VALUES ($1,$2,$3,$4,$5)", hostname, address, false, nil, nil) // result.Secure, result.ErrorMessage(), "result.WhyBogus")
-
-		if err != nil {
-			if strings.Contains(err.Error(), "duplicate key") {
-				// Just a race condition
-				log.Println("duplicate key for", hostname, address)
-			} else {
-				log.Fatal(err)
-			}
-			tx.Rollback()
-			return
-		}
-	}
-
-	if err = tx.Commit(); err != nil {
-		log.Fatal(err)
-	}
-}
-
 // Saves a certificate if it is not saved yet
 func saveCertificate(cert *x509.Certificate) {
 	sha1sum := string(cert.FingerprintSHA1)
@@ -311,21 +271,30 @@ func saveMxHostSummary(result *MxHostSummary) {
 }
 
 // Saves a MxDomain in the database
-func saveMxDomain(record *TxtRecord) {
-	txt := record.String()
+func saveMxRecord(result *MxRecord) {
+	var exists bool
+	err := dbconn.QueryRow("SELECT TRUE FROM mx_records WHERE hostname = $1", result.domain).Scan(&exists)
 
-	var id int
-	err := dbconn.QueryRow("SELECT id FROM mx_domains WHERE name = $1", record.domain).Scan(&id)
+	params := []interface{}{
+		StringArray(result.Results()),
+		result.Secure(),
+		result.Error(),
+		result.WhyBogus(),
+		result.String(), // TXT record
+		result.starttls,
+		StringArray(setToStringArrays(result.certProblems)),
+		result.domain,
+	}
 
 	switch err {
 	case sql.ErrNoRows:
 		// not yet present
-		_, err := dbconn.Exec("INSERT INTO mx_domains (name,txt) VALUES ($1,$2)", record.domain, txt)
+		_, err := dbconn.Exec("INSERT INTO mx_records (addresses, dns_secure, dns_error, dns_bogus, txt, starttls, cert_problems, updated_at, hostname) VALUES ($1,$2,$3,$4,$5,$6,$7,NOW(),$8)", params...)
 		if err != nil {
 			log.Panicln(err)
 		}
 	case nil:
-		_, err := dbconn.Exec("UPDATE mx_domains SET txt=$1 WHERE id = $2", txt, id)
+		_, err := dbconn.Exec("UPDATE mx_records SET addresses=$1, dns_secure=$2, dns_error=$3, dns_bogus=$4, txt=$5, starttls=$6, cert_problems=$7, updated_at=NOW() WHERE hostname=$8", params...)
 		if err != nil {
 			log.Panicln(err)
 		}

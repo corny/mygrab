@@ -202,6 +202,22 @@ func (group *DnsJobs) Results() []string {
 	return results
 }
 
+func (group *DnsJobs) Secure() bool {
+	return group.jobs[0].Result.Secure
+}
+
+func (group *DnsJobs) Error() *string {
+	if err := group.jobs[0].Result.Error; err != nil {
+		str := err.Error()
+		return &str
+	}
+	return nil
+}
+
+func (group *DnsJobs) WhyBogus() *string {
+	return group.jobs[0].Result.WhyBogus
+}
+
 // Does the lookup
 func (proc *DnsProcessor) Lookup(query *DnsQuery) (result DnsResult) {
 

@@ -11,19 +11,20 @@ type ResultProcessor struct {
 	workers *WorkerPool
 }
 
+type MxRecord struct {
+	*DnsJobs
+	*TxtRecord
+}
+
 func NewResultProcessor(workersCount uint) *ResultProcessor {
 	work := func(item interface{}) {
 		switch res := item.(type) {
-		case *DnsJobs:
-			for _, job := range res.jobs {
-				saveMxAddresses(job)
-			}
 		case *DnsJob:
 			saveDomain(res)
 		case *MxHostSummary:
 			saveMxHostSummary(res)
-		case *TxtRecord:
-			saveMxDomain(res)
+		case *MxRecord:
+			saveMxRecord(res)
 		case *x509.Certificate:
 			saveCertificate(res)
 		case []*x509.Certificate:

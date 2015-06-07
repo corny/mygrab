@@ -81,3 +81,16 @@ func setToByteArrays(set mapset.Set) [][]byte {
 
 	return result
 }
+func setToStringArrays(set mapset.Set) []string {
+	if set == nil {
+		return nil
+	}
+	items := set.ToSlice()
+	result := make([]string, len(items))
+
+	for i, item := range items {
+		result[i] = item.(string)
+	}
+
+	return result
+}
