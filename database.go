@@ -163,12 +163,18 @@ func saveCertificateWithUpdate(cert *x509.Certificate, exists bool) {
 	selfSigned := cert.Subject.CommonName == cert.Issuer.CommonName
 	daysValid := cert.NotAfter.Sub(cert.NotBefore).Hours() / 24
 
-	// Key length
 	var pubkeySize *int
+	var pubkeyBlacklisted *bool
 	switch key := cert.PublicKey.(type) {
 	case *rsa.PublicKey:
+		// Key length
 		len := key.N.BitLen()
 		pubkeySize = &len
+
+		if opensslBlacklist != nil {
+			v := opensslBlacklist.Contains(cert)
+			pubkeyBlacklisted = &v
+		}
 	}
 
 	params := []interface{}{
@@ -176,19 +182,21 @@ func saveCertificateWithUpdate(cert *x509.Certificate, exists bool) {
 		issuer,
 		pubkey,
 		pubkeySize,
+		pubkeyBlacklisted,
 		signatureAlgorithm,
 		publicKeyAlgorithm,
 		selfSigned,
 		cert.IsCA,
 		daysValid,
+		cert.NotAfter,
 		sha1sum,
 	}
 
 	var err error
 	if exists {
-		_, err = dbconn.Exec("UPDATE certificates SET subject_id=$1, issuer_id=$2, key_id=$3, key_size=$4, signature_algorithm=$5, key_algorithm=$6, is_self_signed=$7, is_ca=$8, days_valid=ROUND($9) WHERE id=$10", params...)
+		_, err = dbconn.Exec("UPDATE certificates SET subject_id=$1, issuer_id=$2, key_id=$3, key_size=$4, key_blacklisted=$5, signature_algorithm=$6, key_algorithm=$7, is_self_signed=$8, is_ca=$9, days_valid=ROUND($10), not_after=$11 WHERE id=$12", params...)
 	} else {
-		_, err = dbconn.Exec("INSERT INTO certificates (subject_id, issuer_id, key_id, key_size, signature_algorithm, key_algorithm, is_self_signed, is_ca, days_valid, first_seen_at, id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8, ROUND($9), NOW(), $10)", params...)
+		_, err = dbconn.Exec("INSERT INTO certificates (subject_id, issuer_id, key_id, key_size, key_blacklisted, signature_algorithm, key_algorithm, is_self_signed, is_ca, days_valid, not_after, first_seen_at, id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, ROUND($10), $11, NOW(), $12)", params...)
 	}
 	if err != nil {
 		log.Panicln(err, hex.EncodeToString(cert.FingerprintSHA1))

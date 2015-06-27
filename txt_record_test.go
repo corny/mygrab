@@ -44,7 +44,9 @@ func TestTxtStarttls(t *testing.T) {
 }
 
 func TestTxtWithCertificate(t *testing.T) {
-	certs := parseCertificate("example.com.crt")
+	cert := parseCertificate("testdata/example.com.crt")
+	certs := []*x509.Certificate{cert}
+
 	tlsVersions := mapset.NewThreadUnsafeSetFromSlice([]interface{}{string(ztls.TLSVersion(0x0303).Bytes())})
 	tlsCiphers := mapset.NewThreadUnsafeSetFromSlice([]interface{}{string(ztls.TLSVersion(0xc02f).Bytes())})
 
@@ -63,9 +65,9 @@ func TestTxtWithCertificate(t *testing.T) {
 	}
 }
 
-func parseCertificate(name string) []*x509.Certificate {
-	fileBytes, _ := ioutil.ReadFile("testdata/" + name)
+func parseCertificate(name string) *x509.Certificate {
+	fileBytes, _ := ioutil.ReadFile(name)
 	p, _ := pem.Decode(fileBytes)
 	cert, _ := x509.ParseCertificate(p.Bytes)
-	return []*x509.Certificate{cert}
+	return cert
 }

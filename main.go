@@ -49,6 +49,8 @@ var (
 	dbUser string
 	dbHost = "/var/run/postgresql"
 
+	opensslBlacklist *OpensslBlacklist
+
 	dnsProcessor    *DnsProcessor    // dns lookups
 	hostProcessor   *HostProcessor   // host checks
 	domainProcessor *DomainProcessor // uses the dnsProcessor for MX lookups and saves the domain
@@ -76,6 +78,7 @@ func main() {
 	var err error
 	var command string
 	var singleWorker bool
+	var useOpensslBlacklist bool
 
 	flags := flag.NewFlagSet("default", flag.ContinueOnError)
 
@@ -96,6 +99,8 @@ func main() {
 	flags.UintVar(&hostCacheExpires, "hostCacheExpires", hostCacheExpires, "A host result will be removed after this number of seconds not accessed. A value of 0 disables the cache.")
 	flags.UintVar(&hostCacheRefresh, "hostCacheRefresh", hostCacheRefresh, "A host result will be refreshed after this number of seconds. A value of 0 means it will never be refreshed.")
 	flags.UintVar(&hostCacheInterval, "hostCacheInterval", hostCacheInterval, "The cache worker will sleep for this duration of seconds between runs.")
+
+	flags.BoolVar(&useOpensslBlacklist, "opensslBlacklist", false, "Test public keys againts openssl blacklist")
 
 	// mx cache
 	flags.BoolVar(&mxCacheEnable, "mxCacheEnable", mxCacheEnable, "Always true if dnsServer is enabled or command is 'import-mx'")
@@ -133,6 +138,10 @@ func main() {
 	}
 	if len(args) == 1 {
 		command = args[0]
+	}
+
+	if useOpensslBlacklist {
+		opensslBlacklist = NewOpensslBlacklist()
 	}
 
 	if hostTimeout == 0 {
