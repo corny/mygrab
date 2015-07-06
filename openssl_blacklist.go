@@ -38,7 +38,8 @@ func NewOpensslBlacklist() (blacklist *OpensslBlacklist) {
 
 		file, err := os.Open(path)
 		if err != nil {
-			log.Fatal(err)
+			log.Print(err)
+			log.Fatal("Please install required packages: apt-get install -y openssl-blacklist openssl-blacklist-extra")
 		}
 
 		scanner := bufio.NewScanner(file)
