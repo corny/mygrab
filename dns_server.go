@@ -12,7 +12,7 @@ type DnsServer struct {
 }
 
 // Creates a new DNS server
-func NewDnsServer(zone string) *DnsServer {
+func NewDnsServer(address string, zone string) *DnsServer {
 	// Append dot to zone if missing
 	if !strings.HasSuffix(zone, ".") {
 		zone = zone + "."
@@ -28,7 +28,7 @@ func NewDnsServer(zone string) *DnsServer {
 	server := &DnsServer{
 		zone: zone,
 		server: dns.Server{
-			Addr: ":5533",
+			Addr: address,
 			Net:  "udp",
 		},
 	}

@@ -79,6 +79,7 @@ func main() {
 	var command string
 	var singleWorker bool
 	var useOpensslBlacklist bool
+	var dnsServerAddr string
 
 	flags := flag.NewFlagSet("default", flag.ContinueOnError)
 
@@ -86,8 +87,9 @@ func main() {
 	flags.StringVar(&dnsResolver, "dnsResolver", dnsResolver, "DNS resolver address")
 	flags.UintVar(&dnsResolverTimeout, "dnsResolverTimeout", dnsResolverTimeout, "DNS timeout in seconds")
 	flags.StringVar(&dnsZone, "dnsZone", dnsZone, "The zone for nsupdate and the internal DNS server. 'example.com' will serve a TXT record for some-domain.com at 'some-domain.com.example.com'.")
-	flags.UintVar(&dnsTTL, "dnsTTL", dnsTTL, "TTL for DNS dns records")
-	flags.BoolVar(&dnsServerEnable, "dnsServerEnable", dnsServerEnable, "Enable the internal dns server")
+	flags.UintVar(&dnsTTL, "dnsTTL", dnsTTL, "TTL for DNS records")
+	flags.BoolVar(&dnsServerEnable, "dnsServerEnable", dnsServerEnable, "Enable the internal DNS server")
+	flags.StringVar(&dnsServerAddr, "dnsServerAddr", ":53", "Listening address for the internal DNS server")
 	flags.BoolVar(&dnsUseUnbound, "dnsUseUnbound", dnsUseUnbound, "Use libunbound as recursive resolver to get additional DNSSEC information")
 
 	// nsupdate
@@ -230,7 +232,7 @@ func main() {
 
 	if dnsServerEnable {
 		// Start the DNS server
-		dnsServer = NewDnsServer(dnsZone)
+		dnsServer = NewDnsServer(dnsServerAddr, dnsZone)
 	}
 
 	if command == "" {
