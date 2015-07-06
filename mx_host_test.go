@@ -43,6 +43,10 @@ func TestWithStarttls(t *testing.T) {
 	address := net.ParseIP("109.69.71.161")
 	result := NewMxHostGrab(address, ztls.VersionTLS12)
 
+	if result.starttls == nil {
+		t.Fatal("starttls should not be nil")
+	}
+
 	if *result.starttls != true {
 		t.Fatal("host should have starttls")
 	}
